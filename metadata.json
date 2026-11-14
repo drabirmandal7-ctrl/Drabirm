@@ -1,0 +1,6 @@
+{
+  "name": "SEARCH TUTOR MADARIPUR",
+  "description": "Hyper-local tutor matchmaking, verified home & online educators, and live tuition job platform exclusively for Madaripur District, Bangladesh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
