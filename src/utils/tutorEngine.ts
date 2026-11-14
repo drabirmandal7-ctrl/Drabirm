@@ -1979,8 +1979,8 @@ export function validateTutorProfileSubmission(
     return {
       valid: false,
       errorEn:
-        'Please enter a valid 11-digit BD mobile number (e.g. 01712345678).',
-      errorBn: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 01712345678)।',
+        'Please enter a valid 11-digit BD mobile number (e.g. 01308937770).',
+      errorBn: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 01308937770)।',
     };
   }
 
@@ -3942,7 +3942,7 @@ export async function fetchSiteSocialSettingsFromSupabase(
 }
 
 /**
- * Saves and publishes the Admin-configured Facebook, WhatsApp, bKash, Nagad & Homepage CMS settings to
+ * Saves and publishes the Admin-configured Facebook, WhatsApp, bKash & Nagad settings to
  * Supabase `public.site_settings` (`id = 1`) and `localStorage` with a single query.
  */
 export async function saveSiteSocialSettingsToSupabase(
@@ -4111,12 +4111,12 @@ export function validatePaymentSubmissionInput(
 
   if (!validatePhoneBD(input.senderNumber || '')) {
     const errorEn =
-      'Please enter a valid 11-digit BD sender mobile number (e.g. 01712345678).';
+      'Please enter a valid 11-digit BD sender mobile number (e.g. 01308937770).';
     return {
       valid: false,
       errorEn,
       errorBn:
-        'সঠিক ১১ ডিজিটের প্রেরক বিকাশ/নগদ মোবাইল নম্বর দিন (যেমন: 01712345678)।',
+        'সঠিক ১১ ডিজিটের প্রেরক বিকাশ/নগদ মোবাইল নম্বর দিন (যেমন: 01308937770)।',
       errorMessage: errorEn,
     };
   }

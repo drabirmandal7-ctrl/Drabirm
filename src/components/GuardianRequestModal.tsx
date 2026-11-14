@@ -77,7 +77,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
       if (!isValid) {
         setPhoneError(
           lang === 'en'
-            ? 'Please enter a valid 11-digit Bangladeshi phone number (e.g. 01712345678).'
+            ? 'Please enter a valid 11-digit Bangladeshi phone number (e.g. 01308937770).'
             : 'অনুগ্রহ করে ১১ ডিজিটের সঠিক বাংলাদেশী মোবাইল নম্বর লিখুন।'
         );
       } else {
@@ -94,7 +94,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
     if (!isValidPhone) {
       setPhoneError(
         lang === 'en'
-          ? 'Please enter a valid 11-digit Bangladeshi phone number (e.g. 01712345678).'
+          ? 'Please enter a valid 11-digit Bangladeshi phone number (e.g. 01308937770).'
           : 'অনুগ্রহ করে ১১ ডিজিটের সঠিক বাংলাদেশী মোবাইল নম্বর লিখুন।'
       );
       return;
@@ -297,7 +297,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                       required
                       value={guardianName}
                       onChange={(e) => setGuardianName(e.target.value)}
-                      placeholder="e.g. Alim Hossain"
+                      placeholder="e.g. Rahim Hosen"
                       className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                     />
                   </div>
@@ -318,7 +318,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                       required
                       value={guardianPhone}
                       onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="01712345678"
+                      placeholder="01308937770"
                       className={`w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border text-stone-900 dark:text-white focus:outline-none transition-colors ${
                         phoneError
                           ? 'border-red-500 focus:border-red-600'

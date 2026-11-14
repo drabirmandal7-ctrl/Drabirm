@@ -131,7 +131,6 @@ import {
 } from './utils/supabaseProfileUpload';
 import { supabase } from './supabaseClient.js';
 import { BentoHero } from './components/BentoHero';
-import { OriginalDashboardHero } from './components/OriginalDashboardHero';
 import { TutorDiscoveryConsole } from './components/TutorDiscoveryConsole';
 import { VerificationCenter } from './components/VerificationCenter';
 import { TuitionJobBoard } from './components/TuitionJobBoard';
@@ -2427,6 +2426,12 @@ export default function App() {
       Icon: LayoutDashboard,
     },
     {
+      id: 'tutor_board' as const,
+      en: 'Tutor Board',
+      bn: 'টিউটর বোর্ড',
+      Icon: Users,
+    },
+    {
       id: 'tutor_upload' as const,
       en: 'Profile',
       bn: 'প্রোফাইল',
@@ -2486,6 +2491,18 @@ export default function App() {
               }`}
             >
               {lang === 'en' ? 'Dashboard' : 'ড্যাশবোর্ড'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleProtectedNavigate('tutor_board')}
+              className={`text-sm font-bold px-4 py-2 rounded-full transition-all duration-200 whitespace-nowrap shrink-0 ${
+                activeDesk === 'tutor_board'
+                  ? 'bg-emerald-700 text-white shadow-sm'
+                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-emerald-700 dark:hover:text-emerald-400 hover:shadow-xs'
+              }`}
+            >
+              {lang === 'en' ? 'Tutor Board' : 'টিউটর বোর্ড'}
             </button>
 
             <button

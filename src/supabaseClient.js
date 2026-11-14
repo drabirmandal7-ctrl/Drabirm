@@ -1,16 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://jpgtzxqtksdgzjgntfvp.supabase.co';
-const SUPABASE_PUBLIC_KEY = 'sb_publishable_C9tb0ZlpVYwNce-yW8f7yQ_Ofne6ru4';
+const SUPABASE_URL = 'https://lqlumszqxnzmowfpioxf.supabase.co/';
+const SUPABASE_ANON_KEY = 'sb_publishable_OWl0EbdYM5n2HUzWElzilg_NpfxQkO0';
+const SUPABASE_PUBLIC_KEY = SUPABASE_ANON_KEY;
 
-// Clean any trailing whitespace or '/rest/v1/' suffix so Supabase Auth & REST endpoints resolve properly
-const normalizedSupabaseUrl = SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, '');
-const normalizedSupabaseKey = SUPABASE_PUBLIC_KEY.trim();
+// Clean any trailing whitespace, '/rest/v1/', or trailing '/' suffix so Supabase Auth & REST endpoints resolve properly
+const normalizedSupabaseUrl = SUPABASE_URL.trim()
+  .replace(/\/rest\/v1\/?$/, '')
+  .replace(/\/+$/, '');
+const normalizedSupabaseKey = SUPABASE_ANON_KEY.trim();
 
 // Proactively remove expired or malformed local auth tokens before client startup to prevent 400 refresh_token errors
 if (typeof window !== 'undefined' && window.localStorage) {
+  const authStorageKey = 'sb-lqlumszqxnzmowfpioxf-auth-token';
   try {
-    const authStorageKey = 'sb-jpgtzxqtksdgzjgntfvp-auth-token';
     const rawToken = window.localStorage.getItem(authStorageKey);
     if (rawToken) {
       const parsed = JSON.parse(rawToken);
@@ -25,7 +28,7 @@ if (typeof window !== 'undefined' && window.localStorage) {
     }
   } catch {
     try {
-      window.localStorage.removeItem('sb-jpgtzxqtksdgzjgntfvp-auth-token');
+      window.localStorage.removeItem(authStorageKey);
     } catch {
       // Ignore storage access errors
     }
@@ -69,7 +72,7 @@ export const supabase = createClient(
   }
 );
 
-export { SUPABASE_URL, SUPABASE_PUBLIC_KEY };
+export { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_PUBLIC_KEY };
 export default supabase;
 
 

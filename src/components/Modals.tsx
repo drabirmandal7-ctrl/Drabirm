@@ -387,7 +387,7 @@ export const FullProfileModal: React.FC<FullProfileModalProps> = ({
               <input
                 id="rev-guardian-name"
                 type="text"
-                placeholder="e.g. Md. Rakibul Hasan"
+                placeholder="e.g. Rahim Hosen"
                 value={guardianName}
                 onChange={(e) => setGuardianName(e.target.value)}
                 className="w-full px-3 py-2 text-xs rounded-lg bg-[#FAF8F5] dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -602,8 +602,8 @@ export const BookTrialModal: React.FC<BookTrialModalProps> = ({
     if (!validatePhoneBD(guardianPhone)) {
       setErrorMsg(
         lang === 'en'
-          ? 'Please enter a valid 11-digit Bangladesh mobile number (e.g. 01712345678).'
-          : 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 01712345678)।'
+          ? 'Please enter a valid 11-digit Bangladesh mobile number (e.g. 01308937770).'
+          : 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 01308937770)।'
       );
       return;
     }
@@ -725,7 +725,7 @@ export const BookTrialModal: React.FC<BookTrialModalProps> = ({
                 <input
                   id="trial-guardian-name"
                   type="text"
-                  placeholder="e.g. Md. Rakibul Hasan"
+                  placeholder="e.g. Rahim Hosen"
                   value={guardianName}
                   onChange={(e) => setGuardianName(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -745,7 +745,7 @@ export const BookTrialModal: React.FC<BookTrialModalProps> = ({
                   <input
                     id="trial-guardian-phone"
                     type="tel"
-                    placeholder="01712345678"
+                    placeholder="01308937770"
                     value={guardianPhone}
                     onChange={(e) => setGuardianPhone(e.target.value)}
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
@@ -1304,7 +1304,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
     if (!validatePhoneBD(guardianPhone)) {
       setErrorMsg(
         lang === 'en'
-          ? 'Please enter a valid 11-digit BD mobile number (01XXXXXXXXX).'
+          ? 'Please enter a valid 11-digit BD mobile number (e.g. 01308937770).'
           : 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন।'
       );
       return;

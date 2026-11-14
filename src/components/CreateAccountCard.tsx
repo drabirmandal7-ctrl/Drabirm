@@ -350,7 +350,7 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
                   <input
                     type="text"
                     aria-label="Full Name"
-                    placeholder="Full Name"
+                    placeholder="e.g. Rahim Hosen"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="w-full bg-transparent text-sm text-slate-800 dark:text-stone-100 placeholder:text-slate-400 focus:outline-none"

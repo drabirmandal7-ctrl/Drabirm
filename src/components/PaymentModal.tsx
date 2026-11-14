@@ -608,7 +608,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   type="text"
                   value={tutorName}
                   onChange={(e) => setTutorName(e.target.value)}
-                  placeholder="e.g. Md. Rakibul Hasan"
+                  placeholder="e.g. Rahim Hosen"
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                 />
               </div>
@@ -648,7 +648,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     type="tel"
                     value={senderNumber}
                     onChange={(e) => setSenderNumber(e.target.value)}
-                    placeholder="01712345678"
+                    placeholder="01308937770"
                     className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm font-mono-num rounded-xl bg-[#FAF8F5] dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                   />
                 </div>

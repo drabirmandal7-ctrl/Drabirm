@@ -2477,7 +2477,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     type="text"
                     value={tutorName}
                     onChange={(e) => setTutorName(e.target.value)}
-                    placeholder="e.g. Md. Rakibul Hasan"
+                    placeholder="e.g. Rahim Hosen"
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                   />
                 </div>
@@ -2496,7 +2496,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="01712345678"
+                    placeholder="01308937770"
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
                   />
                 </div>
@@ -3573,7 +3573,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
         {/* Two-Row Header Layout: Row 1 (Section Tabs) + Row 2 (Search, Sort, Filter, Expand/Collapse Controls) */}
         <div className="mt-3 pt-3 border-t border-stone-200/80 dark:border-stone-800 flex flex-col gap-3">
-          {/* Row 1: All Section Tabs + Homepage CMS — 100% visible with flex-wrap gap-2 w-full */}
+          {/* Row 1: All Section Tabs — 100% visible with flex-wrap gap-2 w-full */}
           <div
             role="tablist"
             aria-label="Admin Dashboard Sections"
@@ -3585,7 +3585,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   id: 'all_accordion' as const,
                   labelEn: 'All Sections',
                   labelBn: 'সকল সেকশন',
-                  badge: 7,
+                  badge: 6,
                 },
                 {
                   id: 'site_settings' as const,
@@ -7788,7 +7788,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         guardianName: e.target.value,
                       })
                     }
-                    placeholder="e.g. Alim Hossain"
+                    placeholder="e.g. Rahim Hosen"
                     className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white font-semibold"
                   />
                 </div>
@@ -7806,7 +7806,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         guardianPhone: e.target.value,
                       })
                     }
-                    placeholder="01712345678"
+                    placeholder="01308937770"
                     className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num font-bold"
                   />
                 </div>
