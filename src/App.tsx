@@ -119,8 +119,14 @@ import {
   PUBLIC_TUTOR_SUMMARY_COLUMNS,
   PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS,
   PUBLIC_TUTOR_VERIFICATION_FALLBACK_COLUMNS,
+  PUBLIC_TUITION_CIRCULAR_COLUMNS,
+  PUBLIC_TUITION_CIRCULAR_FALLBACK_COLUMNS,
+  PUBLIC_CIRCULAR_APPLICATION_COLUMNS,
+  PUBLIC_CIRCULAR_APPLICATION_FALLBACK_COLUMNS,
   ADMIN_VERIFICATION_DOCUMENT_COLUMNS,
   mergeVerificationDocumentScans,
+  fetchSiteSocialSettingsOncePerSession,
+  fetchSiteNoticesOncePerSession,
   isLiveSessionCacheFresh,
   readLiveSessionCacheFromStorage,
   writeLiveSessionCacheToStorage,
@@ -407,8 +413,11 @@ export default function App() {
     'refund'
   );
 
-  const refreshSiteSocialSettings = useCallback(async () => {
-    const latest = await fetchSiteSocialSettingsFromSupabase(supabase);
+  const refreshSiteSocialSettings = useCallback(async (forceRefresh = false) => {
+    const latest = await fetchSiteSocialSettingsOncePerSession(
+      supabase,
+      forceRefresh
+    );
     setSiteSocialSettings(latest);
   }, []);
 
@@ -417,8 +426,11 @@ export default function App() {
     setPaymentRequests(latest);
   }, []);
 
-  const refreshSiteNotices = useCallback(async () => {
-    const latest = await fetchSiteNoticesFromSupabase(supabase);
+  const refreshSiteNotices = useCallback(async (forceRefresh = false) => {
+    const latest = await fetchSiteNoticesOncePerSession(
+      supabase,
+      forceRefresh
+    );
     setSiteNotices(latest);
   }, []);
 
@@ -942,13 +954,42 @@ export default function App() {
           let matchedRow: TutorVerificationRow | null = null;
           let querySucceeded = false;
 
-          if (cleanEmail) {
-            const emailRes = await supabase
+          const fetchLightweightOwnProfile = async (
+            column: 'user_email' | 'user_id',
+            value: string
+          ): Promise<{ data: TutorVerificationRow[] | null; error: any }> => {
+            const res = await supabase
               .from('tutor_verifications')
-              .select('*')
-              .eq('user_email', cleanEmail)
+              .select(PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS)
+              .eq(column, value)
               .order('created_at', { ascending: false })
               .limit(1);
+
+            if (!res.error) {
+              return {
+                data: (res.data || null) as unknown as TutorVerificationRow[] | null,
+                error: res.error,
+              };
+            }
+            const fallbackRes = await supabase
+              .from('tutor_verifications')
+              .select(PUBLIC_TUTOR_VERIFICATION_FALLBACK_COLUMNS)
+              .eq(column, value)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            return {
+              data: (fallbackRes.data || null) as unknown as
+                | TutorVerificationRow[]
+                | null,
+              error: fallbackRes.error,
+            };
+          };
+
+          if (cleanEmail) {
+            const emailRes = await fetchLightweightOwnProfile(
+              'user_email',
+              cleanEmail
+            );
 
             if (!emailRes.error) {
               querySucceeded = true;
@@ -959,12 +1000,10 @@ export default function App() {
           }
 
           if (!matchedRow && cleanUserId) {
-            const idRes = await supabase
-              .from('tutor_verifications')
-              .select('*')
-              .eq('user_id', cleanUserId)
-              .order('created_at', { ascending: false })
-              .limit(1);
+            const idRes = await fetchLightweightOwnProfile(
+              'user_id',
+              cleanUserId
+            );
 
             if (!idRes.error) {
               querySucceeded = true;
@@ -975,12 +1014,10 @@ export default function App() {
           }
 
           if (!matchedRow && emailPrefix && emailPrefix !== cleanUserId) {
-            const prefixRes = await supabase
-              .from('tutor_verifications')
-              .select('*')
-              .eq('user_id', emailPrefix)
-              .order('created_at', { ascending: false })
-              .limit(1);
+            const prefixRes = await fetchLightweightOwnProfile(
+              'user_id',
+              emailPrefix
+            );
 
             if (!prefixRes.error) {
               querySucceeded = true;
@@ -1290,15 +1327,63 @@ export default function App() {
             .order('created_at', { ascending: false });
         };
 
-        const [circularsRes, appsRes, verificationsRes] = await Promise.all([
-          supabase
+        const fetchLightweightCirculars = async (): Promise<{
+          data: TuitionCircularRow[] | null;
+          error: any;
+        }> => {
+          const res = await supabase
             .from('tuition_circulars')
-            .select('*')
-            .order('created_at', { ascending: false }),
-          supabase
+            .select(PUBLIC_TUITION_CIRCULAR_COLUMNS)
+            .order('created_at', { ascending: false });
+          if (!res.error) {
+            return {
+              data: (res.data || null) as unknown as TuitionCircularRow[] | null,
+              error: res.error,
+            };
+          }
+          const fallbackRes = await supabase
+            .from('tuition_circulars')
+            .select(PUBLIC_TUITION_CIRCULAR_FALLBACK_COLUMNS)
+            .order('created_at', { ascending: false });
+          return {
+            data: (fallbackRes.data || null) as unknown as
+              | TuitionCircularRow[]
+              | null,
+            error: fallbackRes.error,
+          };
+        };
+
+        const fetchLightweightApplications = async (): Promise<{
+          data: CircularApplicationRow[] | null;
+          error: any;
+        }> => {
+          const res = await supabase
             .from('circular_applications')
-            .select('*')
-            .order('created_at', { ascending: false }),
+            .select(PUBLIC_CIRCULAR_APPLICATION_COLUMNS)
+            .order('created_at', { ascending: false });
+          if (!res.error) {
+            return {
+              data: (res.data || null) as unknown as
+                | CircularApplicationRow[]
+                | null,
+              error: res.error,
+            };
+          }
+          const fallbackRes = await supabase
+            .from('circular_applications')
+            .select(PUBLIC_CIRCULAR_APPLICATION_FALLBACK_COLUMNS)
+            .order('created_at', { ascending: false });
+          return {
+            data: (fallbackRes.data || null) as unknown as
+              | CircularApplicationRow[]
+              | null,
+            error: fallbackRes.error,
+          };
+        };
+
+        const [circularsRes, appsRes, verificationsRes] = await Promise.all([
+          fetchLightweightCirculars(),
+          fetchLightweightApplications(),
           fetchLightweightVerifications(),
         ]);
 
@@ -1426,12 +1511,12 @@ export default function App() {
     [fetchMyTutorProfile]
   );
 
-  // Fetch live data directly from Supabase on initial page load and subscribe to live tuition_circulars changes for ALL visitors and logged-in users
+  // Fetch live data on initial mount (with once-per-session caching for site_settings & site_notices and zero idle WebSocket channels)
   useEffect(() => {
     void fetchLiveCirculars();
-    void refreshSiteSocialSettings();
+    void refreshSiteSocialSettings(false);
     void refreshPaymentRequests();
-    void refreshSiteNotices();
+    void refreshSiteNotices(false);
     void refreshGuardianRequests();
 
     const handleStorageChange = (e: StorageEvent) => {
@@ -1448,49 +1533,8 @@ export default function App() {
 
     window.addEventListener('storage', handleStorageChange);
 
-    // Subscribe to realtime changes on public.tuition_circulars & public.circular_applications so visitors and logged-in users immediately see new circulars
-    let realtimeChannel: any = null;
-    try {
-      if (typeof supabase.channel === 'function') {
-        realtimeChannel = supabase
-          .channel('public-tuition-circulars-sync')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'tuition_circulars',
-            },
-            () => {
-              void fetchLiveCirculars();
-            }
-          )
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'circular_applications',
-            },
-            () => {
-              void fetchLiveCirculars();
-            }
-          )
-          .subscribe();
-      }
-    } catch {
-      // Ignore realtime subscription errors if offline
-    }
-
     return () => {
       window.removeEventListener('storage', handleStorageChange);
-      try {
-        if (realtimeChannel && typeof supabase.removeChannel === 'function') {
-          void supabase.removeChannel(realtimeChannel);
-        }
-      } catch {
-        // Ignore channel cleanup errors
-      }
     };
   }, [
     fetchLiveCirculars,
@@ -3143,7 +3187,8 @@ export default function App() {
                 fetchLiveCirculars(),
                 lazyLoadAdminVerificationScans(true),
                 refreshPaymentRequests(),
-                refreshSiteNotices(),
+                refreshSiteSocialSettings(true),
+                refreshSiteNotices(true),
                 refreshGuardianRequests(),
               ]);
             }}

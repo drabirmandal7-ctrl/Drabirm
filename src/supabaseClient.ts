@@ -66,6 +66,11 @@ export const supabase = createClient(
   normalizedSupabaseUrl,
   normalizedSupabaseKey,
   {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
     global: {
       fetch: customFetch,
     },

@@ -4,6 +4,7 @@ import {
   VerificationRequest,
 } from '../types/madaripur';
 import {
+  PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS,
   SupabaseSessionUserInput,
   buildInitialGoogleTutorProfile,
   buildSupabaseStorageObjectPath,
@@ -583,7 +584,7 @@ export async function syncTutorProfileToSupabase(
     if (cleanCode) {
       const codeLookup = await supabase
         .from('tutor_verifications')
-        .select('*')
+        .select('id,verification_code')
         .eq('verification_code', cleanCode)
         .limit(1);
       if (
@@ -598,7 +599,7 @@ export async function syncTutorProfileToSupabase(
     if (!existingRow && cleanEmail) {
       const emailLookup = await supabase
         .from('tutor_verifications')
-        .select('*')
+        .select('id,verification_code')
         .eq('user_email', cleanEmail)
         .order('created_at', { ascending: false })
         .limit(1);
@@ -928,11 +929,12 @@ export async function ensureGoogleUserProfileSynced(
     const emailPrefix = cleanEmail ? cleanEmail.split('@')[0] : '';
     let existingRow: TutorVerificationRow | null = null;
 
+    const ownerSyncColumns = `${PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS},nid_scan_url,student_id_scan_url`;
     try {
       if (cleanEmail) {
         const emailLookup = await supabase
           .from('tutor_verifications')
-          .select('*')
+          .select(ownerSyncColumns)
           .eq('user_email', cleanEmail)
           .order('created_at', { ascending: false })
           .limit(1);
@@ -948,7 +950,7 @@ export async function ensureGoogleUserProfileSynced(
       if (!existingRow && cleanUserId) {
         const idLookup = await supabase
           .from('tutor_verifications')
-          .select('*')
+          .select(ownerSyncColumns)
           .eq('user_id', cleanUserId)
           .order('created_at', { ascending: false })
           .limit(1);
@@ -964,7 +966,7 @@ export async function ensureGoogleUserProfileSynced(
       if (!existingRow && emailPrefix && emailPrefix !== cleanUserId) {
         const prefixLookup = await supabase
           .from('tutor_verifications')
-          .select('*')
+          .select(ownerSyncColumns)
           .eq('user_id', emailPrefix)
           .order('created_at', { ascending: false })
           .limit(1);

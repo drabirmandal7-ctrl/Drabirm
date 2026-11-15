@@ -31,7 +31,9 @@ import {
 import {
   DEFAULT_SITE_SOCIAL_SETTINGS,
   MADARIPUR_COLLEGE_LABELS_BN,
-  MADARIPUR_INSTITUTION_CATEGORIES,
+  MEMOIZED_ALL_UPAZILAS,
+  MEMOIZED_COLLEGE_TAGS,
+  MEMOIZED_MEDIUM_CATEGORIES,
   SiteSocialSettings,
   formatBDT,
   resolveHomepageLiveStats,
@@ -58,21 +60,11 @@ interface BentoHeroProps {
   siteSocialSettings?: SiteSocialSettings;
 }
 
-const COLLEGE_TAGS: CollegeTag[] = [
-  'All',
-  ...MADARIPUR_INSTITUTION_CATEGORIES,
-];
+const COLLEGE_TAGS = MEMOIZED_COLLEGE_TAGS;
 
 const COLLEGE_LABELS_BN: Record<CollegeTag, string> = MADARIPUR_COLLEGE_LABELS_BN;
 
-const MEDIUM_CATEGORIES: MediumCategory[] = [
-  'All',
-  'Bangla Medium',
-  'English Version',
-  'Admission Test',
-  'Madrasah/Quranic',
-  'ICT',
-];
+const MEDIUM_CATEGORIES = MEMOIZED_MEDIUM_CATEGORIES;
 
 const MEDIUM_LABELS_BN: Record<MediumCategory, string> = {
   All: 'সকল মিডিয়াম',
@@ -114,7 +106,7 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
     lang
   );
 
-  const allUpazilas: Upazila[] = ['All', ...MADARIPUR_UPAZILAS];
+  const allUpazilas = MEMOIZED_ALL_UPAZILAS;
   const activeFiltersCount =
     (filters.upazila !== 'All' ? 1 : 0) +
     (filters.medium !== 'All' ? 1 : 0) +

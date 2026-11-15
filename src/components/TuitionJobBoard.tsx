@@ -12,6 +12,7 @@ import {
   VerificationRequest,
 } from '../types/madaripur';
 import {
+  MEMOIZED_ALL_UPAZILAS,
   SiteSocialSettings,
   UserAccount,
   extractAdminNoteFromApplication,
@@ -171,7 +172,7 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
     return true;
   });
 
-  const allUpazilas: Upazila[] = ['All', ...MADARIPUR_UPAZILAS];
+  const allUpazilas = MEMOIZED_ALL_UPAZILAS;
 
   const handleResetFilters = () => {
     setSearchQuery('');

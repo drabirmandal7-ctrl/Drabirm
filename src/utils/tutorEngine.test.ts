@@ -162,6 +162,17 @@ import {
   SPECIFIC_MADARIPUR_COLLEGES,
   isSpecificMadaripurCollege,
   resolveAutoFilledInstitutionName,
+  MEMOIZED_ALL_UPAZILAS,
+  MEMOIZED_COLLEGE_TAGS,
+  MEMOIZED_MEDIUM_CATEGORIES,
+  PUBLIC_TUITION_CIRCULAR_COLUMNS,
+  PUBLIC_CIRCULAR_APPLICATION_COLUMNS,
+  SITE_SETTINGS_SELECT_COLUMNS,
+  SITE_NOTICES_SELECT_COLUMNS,
+  PAYMENT_REQUESTS_SELECT_COLUMNS,
+  GUARDIAN_REQUESTS_SELECT_COLUMNS,
+  fetchSiteSocialSettingsOncePerSession,
+  fetchSiteNoticesOncePerSession,
 } from './tutorEngine';
 
 import {
@@ -4364,6 +4375,152 @@ test('Automatic vs Manual Counter Control: resolveHomepageLiveStats supports tot
   assert.equal(remoteHydrated.manual_total_applications, '310');
   assert.equal(remoteHydrated.manual_verified_tutors, '180+');
   assert.equal(remoteHydrated.manual_online_tutors, '65+');
+});
+
+test('Supabase Free-Tier Optimization: explicit column projections, memoized dropdowns, and once-per-session settings/notices caching', async () => {
+  // 1. All public & semi-static query column lists must explicitly list columns (never *)
+  const columnLists = [
+    PUBLIC_TUITION_CIRCULAR_COLUMNS,
+    PUBLIC_CIRCULAR_APPLICATION_COLUMNS,
+    SITE_SETTINGS_SELECT_COLUMNS,
+    SITE_NOTICES_SELECT_COLUMNS,
+    PAYMENT_REQUESTS_SELECT_COLUMNS,
+    GUARDIAN_REQUESTS_SELECT_COLUMNS,
+  ];
+  for (const cols of columnLists) {
+    assert.ok(cols.includes(','));
+    assert.equal(cols.includes('*'), false);
+  }
+
+  // 2. Static dropdown lists are frozen & memoized
+  assert.equal(Object.isFrozen(MEMOIZED_ALL_UPAZILAS), true);
+  assert.equal(Object.isFrozen(MEMOIZED_COLLEGE_TAGS), true);
+  assert.equal(Object.isFrozen(MEMOIZED_MEDIUM_CATEGORIES), true);
+  assert.equal(MEMOIZED_ALL_UPAZILAS[0], 'All');
+  assert.equal(MEMOIZED_COLLEGE_TAGS[0], 'All');
+  assert.equal(MEMOIZED_MEDIUM_CATEGORIES[0], 'All');
+
+  // 3. Session-once caching for site_settings & site_notices avoids repeat Supabase hits in a single session
+  const sessionMap = new Map<string, string>();
+  const localMap = new Map<string, string>();
+  const mockSessionStorage = {
+    getItem: (k: string) => sessionMap.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      sessionMap.set(k, v);
+    },
+    removeItem: (k: string) => {
+      sessionMap.delete(k);
+    },
+  };
+  const mockLocalStorage = {
+    getItem: (k: string) => localMap.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      localMap.set(k, v);
+    },
+    removeItem: (k: string) => {
+      localMap.delete(k);
+    },
+  };
+  const prevWindow = (globalThis as any).window;
+  (globalThis as any).window = {
+    sessionStorage: mockSessionStorage,
+    localStorage: mockLocalStorage,
+  };
+
+  try {
+    let settingsSelectCalls = 0;
+    let noticesSelectCalls = 0;
+
+    const mockSupabase = {
+      from: (table: string) => ({
+        select: (cols: string) => {
+          assert.equal(cols.includes('*'), false);
+          if (table === 'site_settings') {
+            settingsSelectCalls += 1;
+            return {
+              eq: () => ({
+                maybeSingle: async () => ({
+                  data: {
+                    id: 1,
+                    facebook_url: 'https://www.facebook.com/tutorzone',
+                    whatsapp_url: 'https://wa.me/8801715380022',
+                  },
+                  error: null,
+                }),
+              }),
+            };
+          }
+          if (table === 'site_notices') {
+            noticesSelectCalls += 1;
+            return {
+              order: async () => ({
+                data: [
+                  {
+                    id: 'notice-1',
+                    title: 'Eid Break Notice',
+                    content: 'Classes resume Saturday.',
+                    is_active: true,
+                    created_at: '2026-11-15T00:00:00Z',
+                  },
+                ],
+                error: null,
+              }),
+            };
+          }
+          return {
+            order: async () => ({ data: [], error: null }),
+          };
+        },
+      }),
+    };
+
+    const s1 = await fetchSiteSocialSettingsOncePerSession(
+      mockSupabase,
+      false,
+      mockLocalStorage
+    );
+    const s2 = await fetchSiteSocialSettingsOncePerSession(
+      mockSupabase,
+      false,
+      mockLocalStorage
+    );
+    assert.equal(settingsSelectCalls, 1);
+    assert.equal(s1.facebookUrl, s2.facebookUrl);
+
+    const n1 = await fetchSiteNoticesOncePerSession(
+      mockSupabase,
+      false,
+      mockLocalStorage
+    );
+    const n2 = await fetchSiteNoticesOncePerSession(
+      mockSupabase,
+      false,
+      mockLocalStorage
+    );
+    assert.equal(noticesSelectCalls, 1);
+    assert.equal(n1.length, 1);
+    assert.equal(n2.length, 1);
+
+    // forceRefresh = true explicitly re-fetches from Supabase
+    await fetchSiteSocialSettingsOncePerSession(
+      mockSupabase,
+      true,
+      mockLocalStorage
+    );
+    await fetchSiteNoticesOncePerSession(
+      mockSupabase,
+      true,
+      mockLocalStorage
+    );
+    assert.equal(settingsSelectCalls, 2);
+    assert.equal(noticesSelectCalls, 2);
+  } finally {
+    if (prevWindow === undefined) {
+      delete (globalThis as any).window;
+    } else {
+      (globalThis as any).window = prevWindow;
+    }
+  }
 });
 
 

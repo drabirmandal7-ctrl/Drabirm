@@ -83,7 +83,9 @@ export async function executeAdminDeleteProfileEverywhere(
     try {
       const lookupRes = await supabase
         .from('tutor_verifications')
-        .select('*')
+        .select(
+          'id,user_email,email,user_id,mobile_number,profile_photo_url,nid_scan_url,student_id_scan_url'
+        )
         .eq('verification_code', cleanCode)
         .limit(1);
       if (

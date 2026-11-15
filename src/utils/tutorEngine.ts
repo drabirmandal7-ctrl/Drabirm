@@ -2332,6 +2332,35 @@ export const MADARIPUR_INSTITUTION_CATEGORIES: Exclude<CollegeTag, 'All'>[] = [
   'Private University / Other Institution',
 ];
 
+/**
+ * Aggressively memoized static/semi-static dropdown option lists so components
+ * never reallocate or recompute dropdown arrays across renders or tab switches.
+ */
+export const MEMOIZED_ALL_UPAZILAS: readonly Upazila[] = Object.freeze([
+  'All',
+  'Madaripur Sadar',
+  'Shibchar',
+  'Kalkini',
+  'Rajoir',
+  'Dasar',
+  'Charmuguria',
+  'Mostofapur',
+] as const);
+
+export const MEMOIZED_COLLEGE_TAGS: readonly CollegeTag[] = Object.freeze([
+  'All',
+  ...MADARIPUR_INSTITUTION_CATEGORIES,
+] as const);
+
+export const MEMOIZED_MEDIUM_CATEGORIES: readonly MediumCategory[] = Object.freeze([
+  'All',
+  'Bangla Medium',
+  'English Version',
+  'Admission Test',
+  'Madrasah/Quranic',
+  'ICT',
+] as const);
+
 export const MADARIPUR_COLLEGE_LABELS_BN: Record<CollegeTag, string> = {
   All: 'সকল প্রতিষ্ঠান',
   'Madaripur Govt. College (Govt. Nazimuddin College)':
@@ -4916,11 +4945,19 @@ export function writeSiteSocialSettingsToStorage(
   return next;
 }
 
+export const SITE_SETTINGS_SELECT_COLUMNS =
+  'id,facebook_url,whatsapp_url,bkash_number,nagad_number,verification_fee,stats_mode,manual_verified_tutors,manual_online_tutors,manual_active_circulars,badge_3_value,badge_3_label,badge_4_value,badge_4_label,hero_top_badge_1,hero_top_badge_2,hero_title,guardian_card_title,guardian_card_badge,tutor_card_title,tutor_card_desc,raw_data,updated_at';
+
+export const SITE_SETTINGS_MINIMAL_COLUMNS = 'id,facebook_url,whatsapp_url,raw_data';
+
+export const SITE_SETTINGS_SESSION_FETCHED_KEY =
+  'tutorzone_site_settings_fetched_once_v1';
+
 const siteSettingsClientKnownColumns = new WeakMap<object, Set<string>>();
 
 /**
  * Fetches live social, payment & homepage CMS settings from Supabase `public.site_settings` (`id = 1`)
- * and caches them in `sessionStorage` and `localStorage`.
+ * using explicit column selection and caches them in `sessionStorage` and `localStorage`.
  */
 export async function fetchSiteSocialSettingsFromSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -4932,23 +4969,36 @@ export async function fetchSiteSocialSettingsFromSupabase(
     return localSettings;
   }
 
-  try {
-    const query = supabaseClient.from('site_settings').select('*').eq('id', 1);
-    let row: Record<string, unknown> | null = null;
-
+  const runSiteSettingsQuery = async (columns: string) => {
+    const query = supabaseClient
+      .from('site_settings')
+      .select(columns)
+      .eq('id', 1);
     if (typeof query.maybeSingle === 'function') {
-      const res = await query.maybeSingle();
-      if (!res.error && res.data) {
-        row = res.data;
-      }
-    } else if (typeof query.limit === 'function') {
-      const res = await query.limit(1);
-      if (!res.error && Array.isArray(res.data) && res.data.length > 0) {
-        row = res.data[0];
-      }
+      return query.maybeSingle();
     }
+    if (typeof query.limit === 'function') {
+      const res = await query.limit(1);
+      return {
+        data:
+          Array.isArray(res.data) && res.data.length > 0 ? res.data[0] : null,
+        error: res.error,
+      };
+    }
+    return { data: null, error: null };
+  };
 
-    if (row && typeof row === 'object') {
+  try {
+    let res = await runSiteSettingsQuery(SITE_SETTINGS_SELECT_COLUMNS);
+    if (res?.error) {
+      res = await runSiteSettingsQuery(SITE_SETTINGS_MINIMAL_COLUMNS);
+    }
+    const row =
+      !res?.error && res?.data && typeof res.data === 'object'
+        ? (res.data as Record<string, unknown>)
+        : null;
+
+    if (row) {
       siteSettingsClientKnownColumns.set(
         supabaseClient as object,
         new Set(Object.keys(row))
@@ -4961,6 +5011,54 @@ export async function fetchSiteSocialSettingsFromSupabase(
   }
 
   return localSettings;
+}
+
+/**
+ * Fetches semi-static `site_settings` from Supabase at most once per browser session,
+ * serving cached sessionStorage data on subsequent component mounts or tab switches.
+ */
+export async function fetchSiteSocialSettingsOncePerSession(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any,
+  forceRefresh = false,
+  storage?: SocialStorageLike | null
+): Promise<SiteSocialSettings> {
+  const sessionStore =
+    typeof window !== 'undefined' && window.sessionStorage
+      ? window.sessionStorage
+      : null;
+
+  if (!forceRefresh && sessionStore) {
+    try {
+      const alreadyFetched =
+        sessionStore.getItem(SITE_SETTINGS_SESSION_FETCHED_KEY) === '1';
+      const cachedSession = sessionStore.getItem(
+        SITE_SOCIAL_SETTINGS_SESSION_KEY
+      );
+      if (alreadyFetched && cachedSession) {
+        return readSiteSocialSettingsFromStorage(storage);
+      }
+    } catch {
+      // Ignore sessionStorage restrictions
+    }
+  }
+
+  const fresh = await fetchSiteSocialSettingsFromSupabase(
+    supabaseClient,
+    storage
+  );
+  if (sessionStore) {
+    try {
+      sessionStore.setItem(
+        SITE_SOCIAL_SETTINGS_SESSION_KEY,
+        JSON.stringify(fresh)
+      );
+      sessionStore.setItem(SITE_SETTINGS_SESSION_FETCHED_KEY, '1');
+    } catch {
+      // Ignore sessionStorage quota errors
+    }
+  }
+  return fresh;
 }
 
 /**
@@ -5727,6 +5825,12 @@ export function writePaymentRequestsToStorage(
   return records;
 }
 
+export const PAYMENT_REQUESTS_SELECT_COLUMNS =
+  'id,tutor_id,tutor_name,amount,purpose,circular_id,status,raw_data,created_at';
+
+export const PAYMENT_REQUESTS_FALLBACK_COLUMNS =
+  'id,tutor_id,amount,status,raw_data,created_at';
+
 export async function fetchPaymentRequestsFromSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseClient: any,
@@ -5738,10 +5842,17 @@ export async function fetchPaymentRequestsFromSupabase(
   }
 
   try {
-    const res = await supabaseClient
+    let res = await supabaseClient
       .from('payment_requests')
-      .select('*')
+      .select(PAYMENT_REQUESTS_SELECT_COLUMNS)
       .order('created_at', { ascending: false });
+
+    if (res.error) {
+      res = await supabaseClient
+        .from('payment_requests')
+        .select(PAYMENT_REQUESTS_FALLBACK_COLUMNS)
+        .order('created_at', { ascending: false });
+    }
 
     if (!res.error && Array.isArray(res.data)) {
       const remoteRecords = (res.data as PaymentRequestRow[]).map(
@@ -6122,6 +6233,15 @@ export function getNoticeCategoryBadgeStyle(category?: string): {
   };
 }
 
+export const SITE_NOTICES_SELECT_COLUMNS =
+  'id,title,content,is_active,raw_data,created_at';
+
+export const SITE_NOTICES_FALLBACK_COLUMNS =
+  'id,title,content,is_active,created_at';
+
+export const SITE_NOTICES_SESSION_FETCHED_KEY =
+  'tutorzone_site_notices_fetched_once_v1';
+
 export async function fetchSiteNoticesFromSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseClient: any,
@@ -6132,10 +6252,19 @@ export async function fetchSiteNoticesFromSupabase(
     return fallback;
   }
   try {
-    const { data, error } = await supabaseClient
+    let res = await supabaseClient
       .from('site_notices')
-      .select('*')
+      .select(SITE_NOTICES_SELECT_COLUMNS)
       .order('created_at', { ascending: false });
+
+    if (res.error) {
+      res = await supabaseClient
+        .from('site_notices')
+        .select(SITE_NOTICES_FALLBACK_COLUMNS)
+        .order('created_at', { ascending: false });
+    }
+
+    const { data, error } = res;
 
     if (error || !Array.isArray(data)) {
       return fallback;
@@ -6166,6 +6295,42 @@ export async function fetchSiteNoticesFromSupabase(
   } catch {
     return fallback;
   }
+}
+
+/**
+ * Fetches semi-static `site_notices` from Supabase at most once per browser session,
+ * returning cached notices unless `forceRefresh = true` is passed.
+ */
+export async function fetchSiteNoticesOncePerSession(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any,
+  forceRefresh = false,
+  storage?: SocialStorageLike | null
+): Promise<SiteNotice[]> {
+  const sessionStore =
+    typeof window !== 'undefined' && window.sessionStorage
+      ? window.sessionStorage
+      : null;
+
+  if (!forceRefresh && sessionStore) {
+    try {
+      if (sessionStore.getItem(SITE_NOTICES_SESSION_FETCHED_KEY) === '1') {
+        return readSiteNoticesFromStorage(storage);
+      }
+    } catch {
+      // Ignore sessionStorage restrictions
+    }
+  }
+
+  const fresh = await fetchSiteNoticesFromSupabase(supabaseClient, storage);
+  if (sessionStore) {
+    try {
+      sessionStore.setItem(SITE_NOTICES_SESSION_FETCHED_KEY, '1');
+    } catch {
+      // Ignore sessionStorage quota errors
+    }
+  }
+  return fresh;
 }
 
 export async function saveSiteNoticeToSupabase(
@@ -6675,6 +6840,12 @@ export function extractDetailedGuardianRequestFields(
   };
 }
 
+export const GUARDIAN_REQUESTS_SELECT_COLUMNS =
+  'id,guardian_name,phone,student_class,subjects,upazila,salary,days_per_week,status,raw_data,created_at';
+
+export const GUARDIAN_REQUESTS_FALLBACK_COLUMNS =
+  'id,guardian_name,phone,student_class,subjects,upazila,salary,status,raw_data,created_at';
+
 export async function fetchGuardianRequestsFromSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseClient: any,
@@ -6685,10 +6856,19 @@ export async function fetchGuardianRequestsFromSupabase(
     return fallback;
   }
   try {
-    const { data, error } = await supabaseClient
+    let res = await supabaseClient
       .from('guardian_requests')
-      .select('*')
+      .select(GUARDIAN_REQUESTS_SELECT_COLUMNS)
       .order('created_at', { ascending: false });
+
+    if (res.error) {
+      res = await supabaseClient
+        .from('guardian_requests')
+        .select(GUARDIAN_REQUESTS_FALLBACK_COLUMNS)
+        .order('created_at', { ascending: false });
+    }
+
+    const { data, error } = res;
 
     if (error || !Array.isArray(data)) {
       return fallback;
@@ -7116,6 +7296,22 @@ export const PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS =
 
 export const PUBLIC_TUTOR_VERIFICATION_FALLBACK_COLUMNS =
   'id,verification_code,user_email,user_id,full_name,mobile_number,upazila,gender,expected_fee,profile_photo_url,profile_photo_name,smart_nid_number,institution_category,university_college_name,department_degree,student_registration_id,teaching_subjects,nid_file_name,student_id_file_name,admin_audit_note,status,hidden_from_admin,created_at';
+
+/**
+ * Explicit lightweight column projection for public `tuition_circulars`
+ * and `circular_applications` queries (avoids SELECT *).
+ */
+export const PUBLIC_TUITION_CIRCULAR_COLUMNS =
+  'id,title,class_level,medium,subjects,upazila,location,salary,days_per_week,tutor_gender,guardian_name,guardian_phone,guardian_address,status,applicants,rejection_note,raw_data,created_at';
+
+export const PUBLIC_TUITION_CIRCULAR_FALLBACK_COLUMNS =
+  'id,title,upazila,location,salary,days_per_week,guardian_phone,status,raw_data,created_at';
+
+export const PUBLIC_CIRCULAR_APPLICATION_COLUMNS =
+  'id,circular_id,user_email,user_id,tutor_id,tutor_name,tutor_phone,institution_qualification,experience_note,status,media_fee,guardian_phone,guardian_address,admin_note,rejection_note,is_rejected,hidden_from_admin,created_at';
+
+export const PUBLIC_CIRCULAR_APPLICATION_FALLBACK_COLUMNS =
+  'id,circular_id,user_email,user_id,tutor_id,tutor_name,tutor_phone,institution_qualification,experience_note,status,created_at';
 
 /**
  * Dedicated column projection for lazy-loading heavy NID and Student ID Base64 scans
