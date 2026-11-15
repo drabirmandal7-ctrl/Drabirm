@@ -13,7 +13,10 @@ import {
 } from 'lucide-react';
 import { MADARIPUR_UPAZILAS, UPAZILA_LABELS } from '../data/madaripurData';
 import { GuardianRequestRecord, Language, Upazila } from '../types/madaripur';
-import { validatePhoneBD } from '../utils/tutorEngine';
+import {
+  MADARIPUR_INSTITUTION_CATEGORIES,
+  validatePhoneBD,
+} from '../utils/tutorEngine';
 
 export interface GuardianRequestModalProps {
   isOpen: boolean;
@@ -387,9 +390,10 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                   <input
                     id="gr-school-college"
                     type="text"
+                    list="madaripur-institutions-datalist"
                     value={schoolCollegeName}
                     onChange={(e) => setSchoolCollegeName(e.target.value)}
-                    placeholder="e.g. UI High School / Nazimuddin College"
+                    placeholder="e.g. Madaripur Govt. College (Govt. Nazimuddin College)"
                     className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   />
                 </div>
@@ -445,11 +449,19 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                   <input
                     id="gr-preferred-uni"
                     type="text"
+                    list="madaripur-institutions-datalist"
                     value={preferredUniversity}
                     onChange={(e) => setPreferredUniversity(e.target.value)}
-                    placeholder="e.g. DU, BUET, Medical, or Govt. Nazimuddin College"
+                    placeholder="e.g. Madaripur Govt. College (Govt. Nazimuddin College)"
                     className="w-full px-3 py-2.5 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   />
+                  <datalist id="madaripur-institutions-datalist">
+                    {MADARIPUR_INSTITUTION_CATEGORIES.map((inst) => (
+                      <option key={inst} value={inst}>
+                        {inst}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
               </div>
 

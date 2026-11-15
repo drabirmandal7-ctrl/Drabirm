@@ -302,12 +302,18 @@ export async function executeAdminDeleteProfileEverywhere(
 
     if (affectedCircularIds.length > 0) {
       await Promise.all(
-        affectedCircularIds.map((circularId) =>
-          supabase
+        affectedCircularIds.map(async (circularId) => {
+          const byId = await supabase
             .from('tuition_circulars')
             .update({ status: 'Active' })
-            .eq('circular_id', circularId)
-        )
+            .eq('id', circularId);
+          if (byId?.error) {
+            await supabase
+              .from('tuition_circulars')
+              .update({ status: 'Active' })
+              .eq('circular_id', circularId);
+          }
+        })
       );
     }
   } catch {

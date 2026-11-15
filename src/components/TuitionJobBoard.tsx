@@ -43,9 +43,11 @@ import {
   Phone,
   Quote,
   RefreshCw,
+  RotateCcw,
   Search,
   Send,
   ShieldAlert,
+  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   UserCheck,
@@ -200,7 +202,7 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
     <section
       id="job-board"
       aria-label="Live Madaripur Tuition Job Board"
-      className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 border-t border-stone-200/80 dark:border-stone-800"
+      className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 border-t border-stone-200/80 dark:border-stone-800 overflow-x-hidden"
     >
       {/* Enterprise-Grade Account Status & Compliance Notice (For Rejected / Restricted Tutors) */}
       {restrictionDetails.isRestricted && (
@@ -259,7 +261,7 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
                 }
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#047857] hover:bg-[#065F46] text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#047857] hover:bg-[#065F46] text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer max-w-full text-center"
               >
                 <MessageCircle className="w-4 h-4 shrink-0" />
                 <span>
@@ -341,8 +343,8 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
       </div>
 
       {/* 2. Compact Search + "⚙️ Filters" Toggle Bar */}
-      <div className="flex items-center gap-2 my-2">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 my-2 w-full">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
@@ -353,7 +355,7 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-[#047857]"
+            className="w-full min-h-[44px] pl-9 pr-3 py-2 text-base sm:text-xs rounded-xl bg-white dark:bg-stone-800 border border-emerald-500/20 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-[#047857] transition-all"
           />
         </div>
 
@@ -361,7 +363,7 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
           type="button"
           onClick={() => setIsFiltersOpen((prev) => !prev)}
           aria-expanded={isFiltersOpen}
-          className="px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shrink-0 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
+          className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-500/25 dark:border-emerald-800 flex items-center gap-1 shrink-0 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all active:scale-[0.98] cursor-pointer"
         >
           <span>⚙️</span>
           <span>{lang === 'en' ? 'Filters' : 'ফিল্টার'}</span>
@@ -489,10 +491,10 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
                 key={upz}
                 type="button"
                 onClick={() => setJobUpazilaFilter(upz)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-full shrink-0 transition-all whitespace-nowrap cursor-pointer ${
+                className={`min-h-[38px] px-3.5 py-1.5 text-xs font-bold rounded-full shrink-0 transition-all duration-200 active:scale-[0.98] whitespace-nowrap cursor-pointer ${
                   active
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'bg-slate-100/90 dark:bg-stone-800/90 text-slate-700 dark:text-stone-200 border border-slate-200/80 dark:border-stone-700 hover:border-emerald-300'
+                    ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                    : 'bg-slate-100/90 dark:bg-stone-800/90 text-slate-700 dark:text-stone-200 border border-emerald-500/20 dark:border-stone-700 hover:border-emerald-400'
                 }`}
               >
                 {lang === 'en' ? UPAZILA_LABELS[upz].en : UPAZILA_LABELS[upz].bn}
@@ -507,18 +509,64 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
       </div>
 
       {/* Circular Cards Grid */}
-      {visibleJobs.length === 0 ? (
-        <div className="rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-10 text-center">
-          <p className="text-base font-bold text-stone-900 dark:text-white mb-1.5">
-            {lang === 'en'
+      {isLoadingCirculars && jobs.length === 0 ? (
+        <div
+          aria-label="Loading tuition circulars"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+        >
+          {[1, 2, 3].map((idx) => (
+            <div
+              key={idx}
+              className="rounded-2xl bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 p-5 shadow-sm animate-pulse space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="h-6 w-24 rounded-full bg-emerald-100/80 dark:bg-stone-800" />
+                <div className="h-5 w-20 rounded-full bg-stone-200/80 dark:bg-stone-800" />
+              </div>
+              <div className="h-5 w-3/4 rounded-lg bg-stone-200 dark:bg-stone-800" />
+              <div className="h-32 w-full rounded-xl bg-stone-100 dark:bg-stone-800/60" />
+              <div className="flex items-center justify-between pt-3 border-t border-stone-100 dark:border-stone-800">
+                <div className="h-8 w-28 rounded-xl bg-emerald-100/70 dark:bg-stone-800" />
+                <div className="h-10 w-28 rounded-xl bg-stone-200 dark:bg-stone-800" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : visibleJobs.length === 0 ? (
+        <div className="rounded-2xl bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 p-8 sm:p-10 text-center shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/20 text-[#059669] dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
+            <Search className="w-5 h-5" />
+          </div>
+          <p className="text-base font-extrabold text-stone-900 dark:text-white mb-1.5">
+            {hasActiveFilters
+              ? lang === 'en'
+                ? 'No tuition circulars match your selected filters.'
+                : 'আপনার নির্বাচিত ফিল্টারে কোনো টিউশনি সার্কুলার পাওয়া যায়নি।'
+              : lang === 'en'
               ? 'No tuition circulars currently listed (0 circulars).'
               : 'বর্তমানে কোনো টিউশনি সার্কুলার নেই (০টি সার্কুলার)।'}
           </p>
-          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">
-            {lang === 'en'
+          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 max-w-md mx-auto">
+            {hasActiveFilters
+              ? lang === 'en'
+                ? 'Try clearing your Upazila, medium, or salary filters to see all available circulars.'
+                : 'সকল চলমান সার্কুলার দেখতে আপনার উপজেলা, মিডিয়াম বা বেতন ফিল্টার রিসেট করুন।'
+              : lang === 'en'
               ? 'Only the Admin can post new tuition circulars from Admin Review.'
               : 'শুধুমাত্র অ্যাডমিন "অ্যাডমিন রিভিউ" থেকে নতুন টিউশনি সার্কুলার প্রকাশ করতে পারবেন।'}
           </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="mt-4 min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all duration-200 active:scale-[0.98] cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>
+                {lang === 'en' ? 'Reset All Filters' : 'সকল ফিল্টার রিসেট করুন'}
+              </span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -594,14 +642,28 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
             return (
               <article
                 key={job.id}
-                className="rounded-2xl bg-white dark:bg-stone-900 border border-slate-200/90 dark:border-stone-800 p-5 flex flex-col justify-between hover:border-[#047857]/50 shadow-xs transition-colors"
+                className="rounded-2xl bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 p-5 flex flex-col justify-between shadow-sm hover:shadow-xl hover:-translate-y-0.5 hover:border-emerald-500/50 transition-all duration-200"
               >
                 <div>
-                  {/* 1. Top Header Bar: ID Pill + Status Badge + Posted Date */}
+                  {/* 1. Top Header Bar: ID Pill + Upazila Pill + Smart NID Verified Badge + Posted Date */}
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-1.5 font-mono-num">
+                    <div className="flex flex-wrap items-center gap-1.5 font-mono-num">
                       <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800 shadow-2xs">
                         {job.id}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50/90 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20">
+                        <MapPin className="w-3 h-3 text-[#059669] dark:text-emerald-400 shrink-0" />
+                        <span>
+                          {lang === 'en'
+                            ? UPAZILA_LABELS[job.upazila]?.en || job.upazila
+                            : UPAZILA_LABELS[job.upazila]?.bn || job.upazila}
+                        </span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-xs">
+                        <ShieldCheck className="w-3 h-3 text-emerald-100 shrink-0" />
+                        <span>
+                          {lang === 'en' ? 'Smart NID Verified' : 'স্মার্ট এনআইডি যাচাইকৃত'}
+                        </span>
                       </span>
                       <span
                         className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
@@ -840,13 +902,13 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
                   )}
                 </div>
 
-                {/* 4. Bottom Action Bar: Monthly Salary + Applicants Badge + Sleek Status Pill / Apply */}
+                {/* 4. Bottom Action Bar: Monthly Salary Highlight Badge + Applicants Badge + Sleek Status Pill / Apply */}
                 <div className="mt-4 pt-3.5 border-t border-slate-200/90 dark:border-stone-800 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <span className="block text-[11px] uppercase tracking-wider text-slate-400 dark:text-stone-400 font-bold">
+                  <div className="px-3 py-1.5 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-500/25 shadow-2xs">
+                    <span className="block text-[10px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400 font-extrabold">
                       {lang === 'en' ? 'Monthly Salary' : 'মাসিক বেতন'}
                     </span>
-                    <div className="text-xl sm:text-2xl font-extrabold font-mono-num text-emerald-700 dark:text-emerald-400">
+                    <div className="text-lg sm:text-xl font-extrabold font-mono-num text-[#047857] dark:text-emerald-300">
                       {formatBDT(job.salaryBdt, lang)}
                     </div>
                   </div>
@@ -872,7 +934,7 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenAdminApplicants(job)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-300 border border-amber-500/40 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-300 border border-amber-500/40 text-xs font-bold transition-all active:scale-[0.98] whitespace-nowrap cursor-pointer"
                       >
                         <Users className="w-3.5 h-3.5" />
                         <span>
@@ -885,21 +947,23 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
 
                     {/* Sleek 1-Application-Per-Circular Status Pill / Action Button */}
                     {buttonState.state === 'pending' ? (
-                      <span
-                        role="status"
+                      <button
+                        type="button"
+                        disabled={true}
                         aria-label={buttonState.label}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-gradient-to-r from-amber-50 to-slate-100 dark:from-amber-950/60 dark:to-stone-800 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800/70 shadow-2xs select-none whitespace-nowrap"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-emerald-50 dark:bg-emerald-950/70 text-[#047857] dark:text-emerald-300 border border-emerald-500/40 dark:border-emerald-700 shadow-2xs select-none whitespace-nowrap cursor-not-allowed opacity-90"
                       >
                         <span>{buttonState.label}</span>
-                      </span>
+                      </button>
                     ) : buttonState.state === 'confirmed' ? (
-                      <span
-                        role="status"
+                      <button
+                        type="button"
+                        disabled={true}
                         aria-label={buttonState.label}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-extrabold bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/80 dark:to-teal-950/80 text-[#047857] dark:text-emerald-300 border border-emerald-400/70 dark:border-emerald-700 shadow-2xs select-none whitespace-nowrap"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/80 dark:to-teal-950/80 text-[#047857] dark:text-emerald-300 border border-emerald-400/70 dark:border-emerald-700 shadow-2xs select-none whitespace-nowrap cursor-not-allowed"
                       >
                         <span>{buttonState.label}</span>
-                      </span>
+                      </button>
                     ) : buttonState.state === 'media_fee' ? (
                       <button
                         type="button"
@@ -908,32 +972,42 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
                             onNavigateToProfile();
                           }
                         }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-extrabold bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-700 hover:to-emerald-700 text-white shadow-sm transition-all whitespace-nowrap cursor-pointer"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-extrabold bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-700 hover:to-emerald-700 text-white shadow-sm transition-all active:scale-[0.98] whitespace-nowrap cursor-pointer"
                       >
                         <span>{buttonState.label}</span>
                       </button>
                     ) : buttonState.state === 'rejected' ? (
-                      <span
-                        role="status"
+                      <button
+                        type="button"
+                        disabled={true}
                         aria-label={buttonState.label}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-gradient-to-r from-rose-50 to-slate-100 dark:from-rose-950/60 dark:to-stone-800 text-rose-700 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800/70 shadow-2xs select-none whitespace-nowrap"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-rose-50 to-slate-100 dark:from-rose-950/60 dark:to-stone-800 text-rose-700 dark:text-rose-300 border border-rose-300/70 dark:border-rose-800/70 shadow-2xs select-none whitespace-nowrap cursor-not-allowed"
                       >
                         <span>{buttonState.label}</span>
-                      </span>
+                      </button>
                     ) : buttonState.state === 'restricted' ? (
                       <button
                         type="button"
-                        disabled
+                        disabled={true}
                         title={restrictionDetails.adminNote}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700 cursor-not-allowed opacity-85 whitespace-nowrap"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700 cursor-not-allowed opacity-85 whitespace-nowrap"
                       >
                         <span>{buttonState.label}</span>
+                      </button>
+                    ) : myTutorApp ? (
+                      <button
+                        type="button"
+                        disabled={true}
+                        aria-label="Already Applied ✓"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold bg-emerald-50 dark:bg-emerald-950/70 text-[#047857] dark:text-emerald-300 border border-emerald-500/40 dark:border-emerald-700 shadow-2xs select-none whitespace-nowrap cursor-not-allowed opacity-90"
+                      >
+                        <span>Already Applied ✓</span>
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={() => onOpenApplyModal(job)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs whitespace-nowrap cursor-pointer bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white"
+                        className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 active:scale-[0.98] shadow-xs whitespace-nowrap cursor-pointer bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] text-white"
                       >
                         <span>{buttonState.label}</span>
                       </button>

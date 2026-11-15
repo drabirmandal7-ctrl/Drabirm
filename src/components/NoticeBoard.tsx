@@ -87,7 +87,7 @@ export const NoticeBoard: React.FC<NoticeBoardProps> = ({
           ? 'Official Notices and Announcements'
           : 'অফিসিয়াল নোটিশ ও ঘোষণা'
       }
-      className="relative w-full border-t border-stone-200/90 dark:border-stone-800 bg-gradient-to-b from-stone-50/80 via-white to-[#FAF8F5] dark:from-stone-900 dark:via-stone-900/95 dark:to-stone-950 py-10 sm:py-14"
+      className="relative w-full max-w-full overflow-x-hidden border-t border-stone-200/90 dark:border-stone-800 bg-gradient-to-b from-stone-50/80 via-white to-[#FAF8F5] dark:from-stone-900 dark:via-stone-900/95 dark:to-stone-950 py-10 sm:py-14"
     >
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}

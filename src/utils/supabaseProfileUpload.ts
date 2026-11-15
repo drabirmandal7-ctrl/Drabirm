@@ -78,8 +78,10 @@ export function dataUrlToBlob(
   }
 }
 
-export const DEFAULT_IMAGE_MAX_DIMENSION = 600;
-export const DEFAULT_IMAGE_COMPRESSION_QUALITY = 0.55;
+export const PROFILE_PHOTO_MAX_DIMENSION = 400;
+export const ID_SCAN_MAX_DIMENSION = 800;
+export const DEFAULT_IMAGE_MAX_DIMENSION = 800;
+export const DEFAULT_IMAGE_COMPRESSION_QUALITY = 0.65;
 
 /**
  * Calculates target dimensions for an image so its maximum width or height
@@ -196,15 +198,9 @@ export async function compressImageFile(
           ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Try WebP first for maximum compression (~25KB–45KB), fallback to JPEG if unsupported
-          const webpCandidate = canvas.toDataURL('image/webp', quality);
-          const jpegCandidate = canvas.toDataURL('image/jpeg', quality);
-          const useWebp =
-            webpCandidate &&
-            webpCandidate.startsWith('data:image/webp') &&
-            webpCandidate.length <= jpegCandidate.length;
-          const targetMime = useWebp ? 'image/webp' : 'image/jpeg';
-          const compressedDataUrl = useWebp ? webpCandidate : jpegCandidate;
+          // Encode as JPEG at target quality (0.65) for predictable ~25-80KB size and universal compatibility
+          const targetMime = 'image/jpeg';
+          const compressedDataUrl = canvas.toDataURL(targetMime, quality);
 
           const wasResized = width < origWidth || height < origHeight;
           const finalDataUrl =
@@ -224,7 +220,7 @@ export async function compressImageFile(
             return;
           }
 
-          const ext = targetMime === 'image/webp' ? '.webp' : '.jpg';
+          const ext = '.jpg';
           const baseName = file.name
             ? file.name.replace(/\.[^/.]+$/, '')
             : 'document';
@@ -499,26 +495,26 @@ export async function syncTutorProfileToSupabase(
     availableBuckets = [];
   }
 
-  // 2. Aggressively compress any File objects to max 600px at 0.55 quality before uploading/saving to Supabase
+  // 2. Compress Profile Photo to max 400px @ 0.65 JPEG quality (~25-40KB) and NID/Student ID Scans to max 800px @ 0.65 JPEG quality (~50-80KB)
   const [compressedPhoto, compressedNid, compressedUni] = await Promise.all([
     files?.profilePhotoFile
       ? compressImageFile(
           files.profilePhotoFile,
-          DEFAULT_IMAGE_MAX_DIMENSION,
+          PROFILE_PHOTO_MAX_DIMENSION,
           DEFAULT_IMAGE_COMPRESSION_QUALITY
         )
       : Promise.resolve(null),
     files?.nidScanFile
       ? compressImageFile(
           files.nidScanFile,
-          DEFAULT_IMAGE_MAX_DIMENSION,
+          ID_SCAN_MAX_DIMENSION,
           DEFAULT_IMAGE_COMPRESSION_QUALITY
         )
       : Promise.resolve(null),
     files?.uniScanFile
       ? compressImageFile(
           files.uniScanFile,
-          DEFAULT_IMAGE_MAX_DIMENSION,
+          ID_SCAN_MAX_DIMENSION,
           DEFAULT_IMAGE_COMPRESSION_QUALITY
         )
       : Promise.resolve(null),

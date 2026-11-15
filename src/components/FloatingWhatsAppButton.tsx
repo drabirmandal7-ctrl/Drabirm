@@ -34,7 +34,7 @@ export const FloatingWhatsAppButton: React.FC<FloatingWhatsAppButtonProps> = ({
   return (
     <div
       data-testid="floating-whatsapp-widget"
-      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2.5 group pointer-events-none"
+      className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 group pointer-events-none"
     >
       <span
         role="tooltip"

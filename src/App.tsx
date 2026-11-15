@@ -66,6 +66,7 @@ import {
   isOAuthRedirectCallbackUrl,
   isProtectedAdminProfile,
   isSameCircularApplication,
+  isSignUpFlowInProgress,
   isTutorProfileSubmitted,
   mapCircularRowToTuitionJob,
   mapSupabaseRowToVerificationRequest,
@@ -115,12 +116,19 @@ import {
   unblockTutorForCircularState,
   getCleanApplicantExperienceNote,
   findApplicantFullTutorProfile,
+  PUBLIC_TUTOR_SUMMARY_COLUMNS,
   PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS,
   PUBLIC_TUTOR_VERIFICATION_FALLBACK_COLUMNS,
   ADMIN_VERIFICATION_DOCUMENT_COLUMNS,
   mergeVerificationDocumentScans,
+  isLiveSessionCacheFresh,
   readLiveSessionCacheFromStorage,
   writeLiveSessionCacheToStorage,
+  insertTuitionCircularToSupabase,
+  updateTuitionCircularInSupabase,
+  hideTuitionCircularInSupabase,
+  deleteTuitionCircularFromSupabase,
+  DUPLICATE_CIRCULAR_APPLICATION_MESSAGE,
 } from './utils/tutorEngine';
 import { executeAdminDeleteProfileEverywhere } from './utils/supabaseAdminDelete';
 import { BrandLogo } from './components/BrandLogo';
@@ -129,7 +137,7 @@ import {
   executeAdminUpdateProfileInSupabase,
   syncTutorProfileToSupabase,
 } from './utils/supabaseProfileUpload';
-import { supabase } from './supabaseClient.js';
+import { supabase } from './supabaseClient';
 import { BentoHero } from './components/BentoHero';
 import { TutorDiscoveryConsole } from './components/TutorDiscoveryConsole';
 import { VerificationCenter } from './components/VerificationCenter';
@@ -311,7 +319,9 @@ export default function App() {
     []
   );
   const [tutors, setTutors] = useState<TutorProfile[]>(() =>
-    initialSessionCache?.verifications
+    initialSessionCache?.tutors && initialSessionCache.tutors.length > 0
+      ? initialSessionCache.tutors
+      : initialSessionCache?.verifications
       ? syncStrictLiveSupabaseTutors(
           initialSessionCache.verifications,
           INITIAL_TUTORS
@@ -328,6 +338,10 @@ export default function App() {
   const removedByAdminRef = useRef<boolean>(false);
   const fetchProfileInFlightRef = useRef<Map<string, Promise<void>>>(new Map());
   const adminScansLoadedRef = useRef<boolean>(false);
+  const hasInitialLiveFetchCompletedRef = useRef<boolean>(false);
+  const lastSessionCacheAtRef = useRef<number>(
+    initialSessionCache?.updatedAt || Date.now()
+  );
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -344,14 +358,16 @@ export default function App() {
   >(() => initialSessionCache?.applications || []);
   const [isLoadingCirculars, setIsLoadingCirculars] = useState<boolean>(false);
 
-  // Persist fetched records in sessionStorage so switching tabs does not re-download the database
+  // Persist fetched records (active tuition_circulars & approved tutor lists) in sessionStorage for 2 minutes so switching tabs does not re-download the database
   useEffect(() => {
     writeLiveSessionCacheToStorage({
       jobs,
       applications: circularApplications,
       verifications: verificationRequests,
+      tutors,
+      updatedAt: lastSessionCacheAtRef.current,
     });
-  }, [jobs, circularApplications, verificationRequests]);
+  }, [jobs, circularApplications, verificationRequests, tutors]);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [shortlistedIds, setShortlistedIds] = useState<string[]>([]);
   const [bookedTrials, setBookedTrials] = useState<TrialBookingRecord[]>([]);
@@ -501,8 +517,12 @@ export default function App() {
       if (result.allowed) {
         setJobs(result.jobs);
         try {
-          const row = mapTuitionJobToCircularRow(newJob);
-          await supabase.from('tuition_circulars').insert([row]);
+          await insertTuitionCircularToSupabase(supabase, {
+            ...newJob,
+            status: 'Active',
+            hiddenFromAdmin: false,
+          });
+          await fetchLiveCirculars();
         } catch {
           // Local state updated
         }
@@ -550,12 +570,7 @@ export default function App() {
   );
 
   const handleSaveSiteSocialSettings = useCallback(
-    async (input: {
-      facebookUrl?: string;
-      whatsappContact?: string;
-      bkashNumber?: string;
-      nagadNumber?: string;
-    }) => {
+    async (input: Partial<SiteSocialSettings>) => {
       const result = await saveSiteSocialSettingsToSupabase(supabase, input);
       setSiteSocialSettings(result.settings);
     },
@@ -690,6 +705,49 @@ export default function App() {
       root.classList.remove('dark');
     }
   }, [darkMode]);
+
+  // Automatically remove or hide any injected external hosting badges
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.body) return;
+
+    const cleanInjectedBadges = () => {
+      const selectors =
+        'a[href*="netlify.com"], iframe[src*="netlify"], [class*="netlify-badge"], [id*="netlify-badge"]';
+      document.querySelectorAll(selectors).forEach((node) => {
+        const el = node as HTMLElement;
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+
+        const parent = el.parentElement;
+        if (
+          parent &&
+          parent !== document.body &&
+          parent.id !== 'root' &&
+          parent.children.length === 1 &&
+          typeof window !== 'undefined' &&
+          window.getComputedStyle(parent).position === 'fixed'
+        ) {
+          parent.remove();
+        } else {
+          el.remove();
+        }
+      });
+    };
+
+    cleanInjectedBadges();
+
+    const observer = new MutationObserver(() => {
+      cleanInjectedBadges();
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   // Enforce strict revocation if user is not logged into drabirm4@gmail.com / drabirm4
   useEffect(() => {
@@ -1027,6 +1085,14 @@ export default function App() {
       const { data: authListener } = supabase.auth.onAuthStateChange(
         (event, session) => {
           if (!mounted) return;
+          if (isSignUpFlowInProgress()) {
+            // Do not auto-login or redirect to homepage during Create Account -> Sign In transition
+            setCurrentUser(null);
+            setMyTutorProfile(null);
+            setAuthMode('signin');
+            setActiveDesk('account');
+            return;
+          }
           if (event === 'SIGNED_OUT' || !session?.user) {
             clearAdminSessionStorage();
             setIsAdminUnlocked(false);
@@ -1041,7 +1107,7 @@ export default function App() {
               setAuthMode('signin');
               setActiveDesk('account');
             } else if (event === 'SIGNED_OUT') {
-              setActiveDesk('tutors');
+              setActiveDesk((prev) => (prev === 'account' ? 'account' : 'tutors'));
             } else {
               setActiveDesk((prev) =>
                 prev === 'admin_review' ? 'tutors' : prev
@@ -1109,141 +1175,200 @@ export default function App() {
   }, []);
 
   // Fetch live tuition circulars, circular_applications, and lightweight tutor_verifications (excluding Base64 NID/Student ID scans)
-  const fetchLiveCirculars = useCallback(async () => {
-    setIsLoadingCirculars(true);
-    try {
-      const fetchLightweightVerifications = async () => {
-        const res = await supabase
-          .from('tutor_verifications')
-          .select(PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS)
-          .order('created_at', { ascending: false });
-        if (!res.error) return res;
-        return supabase
-          .from('tutor_verifications')
-          .select(PUBLIC_TUTOR_VERIFICATION_FALLBACK_COLUMNS)
-          .order('created_at', { ascending: false });
-      };
-
-      const [circularsRes, appsRes, verificationsRes] = await Promise.all([
-        supabase
-          .from('tuition_circulars')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('circular_applications')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        fetchLightweightVerifications(),
-      ]);
-
-      const hasRemoteApps = !appsRes.error && Array.isArray(appsRes.data);
-      const hasRemoteCirculars =
-        !circularsRes.error && Array.isArray(circularsRes.data);
-      const hasRemoteVerifications =
-        !verificationsRes.error && Array.isArray(verificationsRes.data);
-      const deletedIds = readDeletedProfileIdsFromStorage();
-      const deletedSet = new Set(deletedIds);
-
-      if (hasRemoteVerifications) {
-        const remoteVerifications = filterStrictLiveSupabaseVerifications(
-          verificationsRes.data as unknown as TutorVerificationRow[],
-          deletedIds
-        );
-        // Preserve any already lazy-loaded NID/Student ID scans in memory
-        setVerificationRequests((prev) => {
-          const prevByCode = new Map(
-            prev.map((p) => [(p.id || '').trim().toLowerCase(), p])
-          );
-          return remoteVerifications.map((req) => {
-            const existing = prevByCode.get((req.id || '').trim().toLowerCase());
-            if (!existing) return req;
-            return {
-              ...req,
-              nidScanDataUrl: req.nidScanDataUrl || existing.nidScanDataUrl,
-              uniScanDataUrl: req.uniScanDataUrl || existing.uniScanDataUrl,
-            };
-          });
-        });
-        setTutors((prevTutors) =>
-          syncStrictLiveSupabaseTutors(remoteVerifications, prevTutors)
-        );
-
-        // If a non-admin user is currently logged in and their profile does not exist in live Supabase, verify & wipe immediately
-        const activeUser = currentUserRef.current;
-        if (activeUser && !isAuthorizedAdminAccount(activeUser)) {
-          const cleanActiveEmail = (activeUser.email || '').trim().toLowerCase();
-          const cleanActiveId = (activeUser.id || '').trim().toLowerCase();
-          const stillExistsInLiveList = remoteVerifications.some((r) => {
-            const rEmail = (r.userEmail || r.email || '').trim().toLowerCase();
-            const rUserId = (r.userId || '').trim().toLowerCase();
-            return (
-              (Boolean(cleanActiveEmail) && rEmail === cleanActiveEmail) ||
-              (Boolean(cleanActiveId) && rUserId === cleanActiveId)
-            );
-          });
-          const hadPriorProfile = Boolean(
-            myTutorProfileRef.current ||
-              hasPriorSyncedTutorProfileForEmail(cleanActiveEmail) ||
-              hasPriorSyncedTutorProfileForEmail(cleanActiveId)
-          );
-          if (
-            !stillExistsInLiveList &&
-            hadPriorProfile &&
-            !hasFreshExplicitLoginIntent()
-          ) {
-            void fetchMyTutorProfile(activeUser);
+  const fetchLiveCirculars = useCallback(
+    async (forceRefresh: boolean = true) => {
+      if (!forceRefresh && hasInitialLiveFetchCompletedRef.current) {
+        const cached = readLiveSessionCacheFromStorage();
+        if (isLiveSessionCacheFresh(cached) && cached) {
+          if (Array.isArray(cached.jobs) && cached.jobs.length > 0) {
+            setJobs(cached.jobs);
           }
+          if (Array.isArray(cached.applications)) {
+            setCircularApplications(cached.applications);
+          }
+          if (Array.isArray(cached.verifications)) {
+            setVerificationRequests((prev) => {
+              const prevByCode = new Map(
+                prev.map((p) => [(p.id || '').trim().toLowerCase(), p])
+              );
+              return cached.verifications!.map((req) => {
+                const existing = prevByCode.get(
+                  (req.id || '').trim().toLowerCase()
+                );
+                if (!existing) return req;
+                return {
+                  ...req,
+                  nidScanDataUrl:
+                    req.nidScanDataUrl || existing.nidScanDataUrl,
+                  uniScanDataUrl:
+                    req.uniScanDataUrl || existing.uniScanDataUrl,
+                };
+              });
+            });
+          }
+          if (Array.isArray(cached.tutors) && cached.tutors.length > 0) {
+            setTutors(cached.tutors);
+          }
+          return;
         }
       }
 
-      if (hasRemoteApps) {
-        const remoteApps = (appsRes.data as CircularApplicationRow[]).filter(
-          (app) => {
-            if (isProtectedAdminProfile(app)) return true;
-            const appCode = (app.tutor_id || '').trim().toLowerCase();
-            const appEmail = (app.user_email || '').trim().toLowerCase();
-            const appUserId = (app.user_id || '').trim().toLowerCase();
-            if (
-              (appCode && deletedSet.has(appCode)) ||
-              (appEmail && deletedSet.has(appEmail)) ||
-              (appUserId && deletedSet.has(appUserId))
-            ) {
-              return false;
-            }
-            return true;
-          }
-        );
-        setCircularApplications(remoteApps);
+      setIsLoadingCirculars(true);
+      try {
+        const fetchLightweightVerifications = async () => {
+          const res = await supabase
+            .from('tutor_verifications')
+            .select(PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS)
+            .order('created_at', { ascending: false });
+          if (!res.error) return res;
+          const summaryRes = await supabase
+            .from('tutor_verifications')
+            .select(PUBLIC_TUTOR_SUMMARY_COLUMNS)
+            .order('created_at', { ascending: false });
+          if (!summaryRes.error) return summaryRes;
+          return supabase
+            .from('tutor_verifications')
+            .select(PUBLIC_TUTOR_VERIFICATION_FALLBACK_COLUMNS)
+            .order('created_at', { ascending: false });
+        };
 
-        if (hasRemoteCirculars) {
+        const [circularsRes, appsRes, verificationsRes] = await Promise.all([
+          supabase
+            .from('tuition_circulars')
+            .select('*')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('circular_applications')
+            .select('*')
+            .order('created_at', { ascending: false }),
+          fetchLightweightVerifications(),
+        ]);
+
+        const hasRemoteApps = !appsRes.error && Array.isArray(appsRes.data);
+        const hasRemoteCirculars =
+          !circularsRes.error && Array.isArray(circularsRes.data);
+        const hasRemoteVerifications =
+          !verificationsRes.error && Array.isArray(verificationsRes.data);
+        const deletedIds = readDeletedProfileIdsFromStorage();
+        const deletedSet = new Set(deletedIds);
+
+        if (
+          hasRemoteCirculars ||
+          hasRemoteApps ||
+          hasRemoteVerifications
+        ) {
+          hasInitialLiveFetchCompletedRef.current = true;
+          lastSessionCacheAtRef.current = Date.now();
+        }
+
+        if (hasRemoteVerifications) {
+          const remoteVerifications = filterStrictLiveSupabaseVerifications(
+            verificationsRes.data as unknown as TutorVerificationRow[],
+            deletedIds
+          );
+          // Preserve any already lazy-loaded NID/Student ID scans in memory
+          setVerificationRequests((prev) => {
+            const prevByCode = new Map(
+              prev.map((p) => [(p.id || '').trim().toLowerCase(), p])
+            );
+            return remoteVerifications.map((req) => {
+              const existing = prevByCode.get(
+                (req.id || '').trim().toLowerCase()
+              );
+              if (!existing) return req;
+              return {
+                ...req,
+                nidScanDataUrl: req.nidScanDataUrl || existing.nidScanDataUrl,
+                uniScanDataUrl: req.uniScanDataUrl || existing.uniScanDataUrl,
+              };
+            });
+          });
+          setTutors((prevTutors) =>
+            syncStrictLiveSupabaseTutors(remoteVerifications, prevTutors)
+          );
+
+          // If a non-admin user is currently logged in and their profile does not exist in live Supabase, verify & wipe immediately
+          const activeUser = currentUserRef.current;
+          if (activeUser && !isAuthorizedAdminAccount(activeUser)) {
+            const cleanActiveEmail = (activeUser.email || '')
+              .trim()
+              .toLowerCase();
+            const cleanActiveId = (activeUser.id || '').trim().toLowerCase();
+            const stillExistsInLiveList = remoteVerifications.some((r) => {
+              const rEmail = (r.userEmail || r.email || '')
+                .trim()
+                .toLowerCase();
+              const rUserId = (r.userId || '').trim().toLowerCase();
+              return (
+                (Boolean(cleanActiveEmail) && rEmail === cleanActiveEmail) ||
+                (Boolean(cleanActiveId) && rUserId === cleanActiveId)
+              );
+            });
+            const hadPriorProfile = Boolean(
+              myTutorProfileRef.current ||
+                hasPriorSyncedTutorProfileForEmail(cleanActiveEmail) ||
+                hasPriorSyncedTutorProfileForEmail(cleanActiveId)
+            );
+            if (
+              !stillExistsInLiveList &&
+              hadPriorProfile &&
+              !hasFreshExplicitLoginIntent()
+            ) {
+              void fetchMyTutorProfile(activeUser);
+            }
+          }
+        }
+
+        if (hasRemoteApps) {
+          const remoteApps = (appsRes.data as CircularApplicationRow[]).filter(
+            (app) => {
+              if (isProtectedAdminProfile(app)) return true;
+              const appCode = (app.tutor_id || '').trim().toLowerCase();
+              const appEmail = (app.user_email || '').trim().toLowerCase();
+              const appUserId = (app.user_id || '').trim().toLowerCase();
+              if (
+                (appCode && deletedSet.has(appCode)) ||
+                (appEmail && deletedSet.has(appEmail)) ||
+                (appUserId && deletedSet.has(appUserId))
+              ) {
+                return false;
+              }
+              return true;
+            }
+          );
+          setCircularApplications(remoteApps);
+
+          if (hasRemoteCirculars) {
+            const sortedRows = sortCircularRowsNewestFirst(
+              circularsRes.data as TuitionCircularRow[]
+            );
+            const remoteJobs = sortedRows.map(mapCircularRowToTuitionJob);
+            setJobs(enrichCircularJobsWithApplications(remoteJobs, remoteApps));
+          } else {
+            setJobs((prev) =>
+              enrichCircularJobsWithApplications(prev, remoteApps)
+            );
+          }
+        } else if (hasRemoteCirculars) {
           const sortedRows = sortCircularRowsNewestFirst(
             circularsRes.data as TuitionCircularRow[]
           );
           const remoteJobs = sortedRows.map(mapCircularRowToTuitionJob);
-          setJobs(enrichCircularJobsWithApplications(remoteJobs, remoteApps));
-        } else {
-          setJobs((prev) =>
-            enrichCircularJobsWithApplications(prev, remoteApps)
-          );
+          setCircularApplications((prevApps) => {
+            setJobs(enrichCircularJobsWithApplications(remoteJobs, prevApps));
+            return prevApps;
+          });
         }
-      } else if (hasRemoteCirculars) {
-        const sortedRows = sortCircularRowsNewestFirst(
-          circularsRes.data as TuitionCircularRow[]
-        );
-        const remoteJobs = sortedRows.map(mapCircularRowToTuitionJob);
-        setCircularApplications((prevApps) => {
-          setJobs(enrichCircularJobsWithApplications(remoteJobs, prevApps));
-          return prevApps;
-        });
+      } catch {
+        // Fallback to existing circulars in state if network/table is unavailable
+      } finally {
+        setIsLoadingCirculars(false);
       }
-    } catch {
-      // Fallback to existing circulars in state if network/table is unavailable
-    } finally {
-      setIsLoadingCirculars(false);
-    }
-  }, [fetchMyTutorProfile]);
+    },
+    [fetchMyTutorProfile]
+  );
 
-  // Fetch data ONLY once on initial page load (no polling intervals, no window focus refetches, no tab-switch refetches)
+  // Fetch live data directly from Supabase on initial page load and subscribe to live tuition_circulars changes for ALL visitors and logged-in users
   useEffect(() => {
     void fetchLiveCirculars();
     void refreshSiteSocialSettings();
@@ -1265,8 +1390,49 @@ export default function App() {
 
     window.addEventListener('storage', handleStorageChange);
 
+    // Subscribe to realtime changes on public.tuition_circulars & public.circular_applications so visitors and logged-in users immediately see new circulars
+    let realtimeChannel: any = null;
+    try {
+      if (typeof supabase.channel === 'function') {
+        realtimeChannel = supabase
+          .channel('public-tuition-circulars-sync')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'tuition_circulars',
+            },
+            () => {
+              void fetchLiveCirculars();
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'circular_applications',
+            },
+            () => {
+              void fetchLiveCirculars();
+            }
+          )
+          .subscribe();
+      }
+    } catch {
+      // Ignore realtime subscription errors if offline
+    }
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      try {
+        if (realtimeChannel && typeof supabase.removeChannel === 'function') {
+          void supabase.removeChannel(realtimeChannel);
+        }
+      } catch {
+        // Ignore channel cleanup errors
+      }
     };
   }, [
     fetchLiveCirculars,
@@ -1275,6 +1441,17 @@ export default function App() {
     refreshSiteNotices,
     refreshSiteSocialSettings,
   ]);
+
+  // When switching between Dashboard ('tutors'), Tuition Circulars ('job_board'), or Tutor Board ('tutor_board'), use the 2-minute sessionStorage cache before hitting Supabase
+  useEffect(() => {
+    if (
+      activeDesk === 'job_board' ||
+      activeDesk === 'tutors' ||
+      activeDesk === 'tutor_board'
+    ) {
+      void fetchLiveCirculars(false);
+    }
+  }, [activeDesk, fetchLiveCirculars]);
 
   // Lazy-load NID and Student ID scans ONLY when Admin opens Admin Verification Desk or Applicant Review modal
   useEffect(() => {
@@ -1944,10 +2121,11 @@ export default function App() {
             !isSameCircularApplication(a, applicant)
         );
         if (!remainingConfirmed) {
-          await supabase
-            .from('tuition_circulars')
-            .update({ status: 'Active' })
-            .eq('circular_id', applicant.circular_id);
+          await updateTuitionCircularInSupabase(
+            supabase,
+            applicant.circular_id,
+            { status: 'Active' }
+          );
         }
       }
 
@@ -1971,10 +2149,7 @@ export default function App() {
     );
 
     try {
-      await supabase
-        .from('tuition_circulars')
-        .update({ hidden_from_admin: true })
-        .eq('circular_id', circularId);
+      await hideTuitionCircularInSupabase(supabase, circularId);
     } catch {
       // Local hidden state already applied
     }
@@ -2001,14 +2176,7 @@ export default function App() {
     );
 
     try {
-      await supabase
-        .from('circular_applications')
-        .delete()
-        .eq('circular_id', circularId);
-      await supabase
-        .from('tuition_circulars')
-        .delete()
-        .eq('circular_id', circularId);
+      await deleteTuitionCircularFromSupabase(supabase, circularId);
       await fetchLiveCirculars();
     } catch {
       // Ignore delete network error
@@ -2074,27 +2242,90 @@ export default function App() {
       );
     }
 
+    const targetCircularId = jobId.trim();
+    const targetEmail = (
+      input.userEmail ||
+      currentUser?.email ||
+      myTutorProfile?.userEmail ||
+      myTutorProfile?.email ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+    const targetUserId = (
+      currentUser?.id ||
+      input.userId ||
+      ''
+    ).trim();
+
     const existingApp = hasTutorAlreadyAppliedToCircular(
       circularApplications,
-      jobId,
+      targetCircularId,
       currentUser,
       myTutorProfile,
       {
         tutorId: input.tutorId,
         tutorPhone: input.tutorPhone,
-        userEmail: input.userEmail || currentUser?.email,
+        userEmail: targetEmail || null,
+        userId: targetUserId || null,
       }
     );
     if (existingApp) {
-      throw new Error(
-        lang === 'en'
-          ? 'You have already applied to this tuition circular (limit: 1 application per circular).'
-          : 'আপনি ইতিমধ্যে এই টিউশনি সার্কুলারে আবেদন করেছেন (প্রতি সার্কুলারে ১টি আবেদন)।'
-      );
+      throw new Error(DUPLICATE_CIRCULAR_APPLICATION_MESSAGE);
+    }
+
+    // Pre-insert check against Supabase public.circular_applications for the same (circular_id, user_email / user_id)
+    if (targetCircularId && (targetEmail || targetUserId)) {
+      try {
+        const { data: existingRows, error: checkError } = await supabase
+          .from('circular_applications')
+          .select('id, circular_id, user_email, user_id, tutor_id, tutor_phone, status')
+          .eq('circular_id', targetCircularId);
+
+        if (!checkError && Array.isArray(existingRows)) {
+          const foundDuplicateInDb = existingRows.find(
+            (row: Record<string, unknown>) => {
+              const statusStr = String(row.status || '')
+                .trim()
+                .toLowerCase();
+              if (statusStr === 'archived') return false;
+              const rowEmail = String(row.user_email || '')
+                .trim()
+                .toLowerCase();
+              const rowUserId = String(row.user_id || '')
+                .trim()
+                .toLowerCase();
+              if (targetEmail && rowEmail && rowEmail === targetEmail) {
+                return true;
+              }
+              if (
+                targetUserId &&
+                rowUserId &&
+                rowUserId === targetUserId.toLowerCase()
+              ) {
+                return true;
+              }
+              return false;
+            }
+          );
+
+          if (foundDuplicateInDb) {
+            await fetchLiveCirculars();
+            throw new Error(DUPLICATE_CIRCULAR_APPLICATION_MESSAGE);
+          }
+        }
+      } catch (dbCheckErr) {
+        if (
+          dbCheckErr instanceof Error &&
+          dbCheckErr.message === DUPLICATE_CIRCULAR_APPLICATION_MESSAGE
+        ) {
+          throw dbCheckErr;
+        }
+      }
     }
 
     const newRow = buildCircularApplicationRow(
-      jobId,
+      targetCircularId,
       input,
       currentUser,
       myTutorProfile
@@ -2184,22 +2415,13 @@ export default function App() {
           .eq('tutor_id', applicant.tutor_id);
       }
 
-      const circularUpdatePayload: Record<string, any> = {
-        status: 'Confirmed',
-      };
-      if (guardianPhone) {
-        circularUpdatePayload.guardian_phone = guardianPhone;
-      }
-      if (guardianAddress) {
-        circularUpdatePayload.location_details = guardianAddress;
-      }
-
       await Promise.all([
         appUpdateQuery,
-        supabase
-          .from('tuition_circulars')
-          .update(circularUpdatePayload)
-          .eq('circular_id', circularId),
+        updateTuitionCircularInSupabase(supabase, circularId, {
+          status: 'Confirmed',
+          guardian_phone: guardianPhone,
+          location_details: guardianAddress,
+        }),
       ]);
 
       await fetchLiveCirculars();
@@ -2377,10 +2599,15 @@ export default function App() {
     if (!hasAdminAccess) {
       return;
     }
+    const normalizedNewJob: TuitionJob = {
+      ...newJob,
+      status: 'Active',
+      hiddenFromAdmin: false,
+    };
     const result = publishAdminTuitionCircular(
       'admin_review',
       jobs,
-      newJob,
+      normalizedNewJob,
       hasAdminAccess,
       currentUser
     );
@@ -2389,13 +2616,13 @@ export default function App() {
     }
     setJobs(result.jobs);
 
-    const circularPayload = mapTuitionJobToCircularRow(newJob);
     try {
-      const { error } = await supabase
-        .from('tuition_circulars')
-        .insert([circularPayload]);
+      const { ok, error } = await insertTuitionCircularToSupabase(
+        supabase,
+        normalizedNewJob
+      );
 
-      if (!error) {
+      if (ok && !error) {
         await fetchLiveCirculars();
         setLastAdminMessage(
           lang === 'en'
@@ -2405,7 +2632,7 @@ export default function App() {
       } else {
         setLastAdminMessage(
           lang === 'en'
-            ? `Official Tuition Circular (${newJob.id}) published to Tuition Circulars. (Supabase sync note: ${error.message})`
+            ? `Official Tuition Circular (${newJob.id}) published to Tuition Circulars. (Supabase sync note: ${error?.message || 'Unable to sync'})`
             : `অ্যাডমিন কর্তৃক নতুন টিউশনি সার্কুলার (${newJob.id}) টিউশনি সার্কুলারে প্রকাশিত হয়েছে।`
         );
       }
@@ -2426,12 +2653,6 @@ export default function App() {
       Icon: LayoutDashboard,
     },
     {
-      id: 'tutor_board' as const,
-      en: 'Tutor Board',
-      bn: 'টিউটর বোর্ড',
-      Icon: Users,
-    },
-    {
       id: 'tutor_upload' as const,
       en: 'Profile',
       bn: 'প্রোফাইল',
@@ -2442,6 +2663,12 @@ export default function App() {
       en: 'Tuition Circulars',
       bn: 'টিউশনি সার্কুলার',
       Icon: Briefcase,
+    },
+    {
+      id: 'tutor_board' as const,
+      en: 'Tutor Board',
+      bn: 'টিউটর বোর্ড',
+      Icon: Users,
     },
     ...(hasAdminAccess
       ? [
@@ -2457,21 +2684,21 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen overflow-x-hidden transition-colors ${
+      className={`min-h-screen w-full max-w-full overflow-x-hidden transition-colors ${
         darkMode
           ? 'dark bg-stone-950 text-stone-100'
           : 'bg-[#FAF8F5] text-stone-900'
       } ${lang === 'bn' ? 'font-bangla' : ''}`}
     >
       {/* PREMIUM FROSTED-GLASS TOP NAVBAR WITH PILL NAVIGATION */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-white/90 dark:bg-stone-950/90 shadow-xs border-b border-slate-200/80 dark:border-stone-800">
-        <div className="max-w-[1280px] mx-auto flex items-center justify-between gap-1.5 sm:gap-4 px-2.5 sm:px-6 lg:px-8 py-2.5 sm:py-3">
+      <header className="sticky top-0 z-40 w-full max-w-full overflow-x-hidden backdrop-blur-md bg-white/95 dark:bg-stone-950/95 shadow-xs border-b border-emerald-500/15 dark:border-stone-800">
+        <div className="w-full max-w-[1280px] mx-auto flex flex-wrap items-center justify-between gap-2 sm:gap-3 px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3">
           {/* Zone 1: Modern Tutor Zone 3D Isometric Circuit Cap Logo & Wordmark */}
           <button
             type="button"
             onClick={() => handleProtectedNavigate('tutors')}
             aria-label="Tutor Zone"
-            className="group flex items-center text-left whitespace-nowrap shrink-0 focus:outline-none cursor-pointer"
+            className="order-1 group flex items-center text-left whitespace-nowrap shrink-0 focus:outline-none cursor-pointer active:scale-[0.98] transition-transform max-w-full"
           >
             <BrandLogo size="md" className="gap-1.5 sm:gap-2.5" />
           </button>
@@ -2479,15 +2706,19 @@ export default function App() {
           {/* Zone 2: Centered Rounded Pill Navigation Container */}
           <nav
             aria-label="Isolated Desk Navigation"
-            className="hidden md:flex items-center gap-1.5 bg-slate-100/80 dark:bg-stone-900/90 p-1.5 rounded-full border border-slate-200/80 dark:border-stone-800 shadow-2xs"
+            className={`hidden md:flex flex-wrap items-center justify-center gap-1 xl:gap-1.5 bg-slate-100/90 dark:bg-stone-900/90 p-1 sm:p-1.5 rounded-2xl lg:rounded-full border border-emerald-500/20 dark:border-stone-800 shadow-2xs max-w-full ${
+              hasAdminAccess
+                ? 'order-3 xl:order-2 w-full xl:w-auto'
+                : 'order-3 lg:order-2 w-full lg:w-auto'
+            }`}
           >
             <button
               type="button"
               onClick={() => handleProtectedNavigate('tutors')}
-              className={`text-sm font-bold px-4 py-2 rounded-full transition-all duration-200 whitespace-nowrap shrink-0 ${
+              className={`min-h-[38px] xl:min-h-[40px] text-xs xl:text-sm font-bold px-3 xl:px-4 py-1.5 xl:py-2 rounded-full transition-all duration-200 active:scale-[0.98] whitespace-nowrap shrink-0 cursor-pointer ${
                 activeDesk === 'tutors'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-emerald-700 dark:hover:text-emerald-400 hover:shadow-xs'
+                  ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669] dark:hover:text-emerald-400 hover:shadow-xs'
               }`}
             >
               {lang === 'en' ? 'Dashboard' : 'ড্যাশবোর্ড'}
@@ -2495,23 +2726,11 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => handleProtectedNavigate('tutor_board')}
-              className={`text-sm font-bold px-4 py-2 rounded-full transition-all duration-200 whitespace-nowrap shrink-0 ${
-                activeDesk === 'tutor_board'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-emerald-700 dark:hover:text-emerald-400 hover:shadow-xs'
-              }`}
-            >
-              {lang === 'en' ? 'Tutor Board' : 'টিউটর বোর্ড'}
-            </button>
-
-            <button
-              type="button"
               onClick={() => handleProtectedNavigate('tutor_upload')}
-              className={`text-sm font-bold px-4 py-2 rounded-full transition-all duration-200 whitespace-nowrap shrink-0 ${
+              className={`min-h-[38px] xl:min-h-[40px] text-xs xl:text-sm font-bold px-3 xl:px-4 py-1.5 xl:py-2 rounded-full transition-all duration-200 active:scale-[0.98] whitespace-nowrap shrink-0 cursor-pointer ${
                 activeDesk === 'tutor_upload'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-emerald-700 dark:hover:text-emerald-400 hover:shadow-xs'
+                  ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669] dark:hover:text-emerald-400 hover:shadow-xs'
               }`}
             >
               {lang === 'en' ? 'Profile' : 'প্রোফাইল'}
@@ -2520,23 +2739,35 @@ export default function App() {
             <button
               type="button"
               onClick={() => handleProtectedNavigate('job_board')}
-              className={`text-sm font-bold px-4 py-2 rounded-full transition-all duration-200 whitespace-nowrap shrink-0 ${
+              className={`min-h-[38px] xl:min-h-[40px] text-xs xl:text-sm font-bold px-3 xl:px-4 py-1.5 xl:py-2 rounded-full transition-all duration-200 active:scale-[0.98] whitespace-nowrap shrink-0 cursor-pointer ${
                 activeDesk === 'job_board'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-emerald-700 dark:hover:text-emerald-400 hover:shadow-xs'
+                  ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669] dark:hover:text-emerald-400 hover:shadow-xs'
               }`}
             >
               {lang === 'en' ? 'Tuition Circulars' : 'টিউশনি সার্কুলার'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleProtectedNavigate('tutor_board')}
+              className={`min-h-[38px] xl:min-h-[40px] text-xs xl:text-sm font-bold px-3 xl:px-4 py-1.5 xl:py-2 rounded-full transition-all duration-200 active:scale-[0.98] whitespace-nowrap shrink-0 cursor-pointer ${
+                activeDesk === 'tutor_board'
+                  ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                  : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669] dark:hover:text-emerald-400 hover:shadow-xs'
+              }`}
+            >
+              {lang === 'en' ? 'Tutor Board' : 'টিউটর বোর্ড'}
             </button>
 
             {hasAdminAccess && (
               <button
                 type="button"
                 onClick={() => handleProtectedNavigate('admin_review')}
-                className={`text-sm font-bold px-4 py-2 rounded-full transition-all duration-200 whitespace-nowrap shrink-0 ${
+                className={`min-h-[38px] xl:min-h-[40px] text-xs xl:text-sm font-bold px-3 xl:px-4 py-1.5 xl:py-2 rounded-full transition-all duration-200 active:scale-[0.98] whitespace-nowrap shrink-0 cursor-pointer ${
                   activeDesk === 'admin_review'
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-emerald-700 dark:hover:text-emerald-400 hover:shadow-xs'
+                    ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                    : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669] dark:hover:text-emerald-400 hover:shadow-xs'
                 }`}
               >
                 {lang === 'en' ? 'Admin Review' : 'অ্যাডমিন রিভিউ'}
@@ -2545,7 +2776,11 @@ export default function App() {
           </nav>
 
           {/* Zone 3: Admin Lock/Unlock (Strictly visible ONLY for logged-in drabirm4@gmail.com / drabirm4) & Primary Account Action */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 min-w-0">
+          <div
+            className={`order-2 ${
+              hasAdminAccess ? 'xl:order-3' : 'lg:order-3'
+            } flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 min-w-0 max-w-full`}
+          >
             {hasAdminAccess && (
               <>
                 <button
@@ -2554,9 +2789,9 @@ export default function App() {
                     setActiveDesk('admin_review');
                     setIsPostJobOpen(true);
                   }}
-                  className="hidden lg:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-full shadow-xs transition-all whitespace-nowrap shrink-0"
+                  className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 xl:px-3.5 xl:py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-full shadow-xs transition-all whitespace-nowrap shrink-0"
                 >
-                  <PlusCircle className="w-3.5 h-3.5" />
+                  <PlusCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>
                     {lang === 'en'
                       ? 'Admin: Post Tuition Circular'
@@ -2567,7 +2802,7 @@ export default function App() {
                   type="button"
                   onClick={handleLockAdmin}
                   aria-label={lang === 'en' ? 'Lock Admin' : 'অ্যাডমিন লক'}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-bold text-slate-700 dark:text-stone-200 bg-slate-100 dark:bg-stone-800 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/60 dark:hover:text-red-300 rounded-full border border-slate-200/90 dark:border-stone-700 transition-all whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-bold text-slate-700 dark:text-stone-200 bg-slate-100 dark:bg-stone-800 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/60 dark:hover:text-red-300 rounded-full border border-slate-200/90 dark:border-stone-700 transition-all whitespace-nowrap shrink-0"
                 >
                   <LogOut className="w-3.5 h-3.5 shrink-0" />
                   <span className="hidden min-[390px]:inline">
@@ -2597,7 +2832,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActiveDesk('account')}
-              className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-extrabold tracking-tight rounded-full transition-all duration-200 whitespace-nowrap shrink-0 max-w-[132px] sm:max-w-none ${
+              className={`inline-flex items-center gap-1 sm:gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-extrabold tracking-tight rounded-full transition-all duration-200 whitespace-nowrap shrink-0 max-w-[140px] sm:max-w-[190px] ${
                 activeDesk === 'account'
                   ? 'bg-gradient-to-b from-[#633CFF] to-[#4E24E6] text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/30'
                   : 'bg-[#5B32EE] hover:bg-[#4B23DC] text-white shadow-sm hover:shadow-md'
@@ -2616,44 +2851,42 @@ export default function App() {
         </div>
       </header>
 
-      <main id="top" className="pb-24 sm:pb-12">
-        {/* Ultra-Compact Single-Row Mobile Navigation Pill Bar (No Multi-Row Wrapping) */}
-        <div className="md:hidden max-w-[1280px] mx-auto px-3 sm:px-4 pt-2.5 pb-1">
-          <div className="relative rounded-full overflow-hidden border border-slate-200/80 dark:border-stone-800 bg-slate-100/90 dark:bg-stone-900/90 shadow-2xs">
-            <nav
-              aria-label="Mobile Navigation Bar"
-              className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1.5 px-2 pr-6 whitespace-nowrap flex-nowrap"
-            >
-              {mobileDesks.map((d) => {
-                const IconComponent = d.Icon;
-                const isActive = activeDesk === d.id;
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => handleProtectedNavigate(d.id)}
-                    className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm font-bold rounded-full shrink-0 tracking-tight transition-all cursor-pointer ${
-                      isActive
-                        ? 'bg-emerald-700 text-white shadow-sm'
-                        : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-emerald-700'
-                    }`}
-                  >
-                    <IconComponent
-                      className={`w-3.5 h-3.5 shrink-0 ${
+      <main id="top" className="w-full max-w-full overflow-x-hidden pb-24 sm:pb-12">
+        {/* Sticky Frosted-Glass Single-Row Mobile Navigation Pill Bar (No Multi-Row Wrapping) */}
+        <div className="md:hidden sticky top-[76px] z-30 w-full max-w-full backdrop-blur-md bg-white/95 dark:bg-stone-950/95 border-b border-emerald-500/15 dark:border-stone-800">
+          <div className="w-full max-w-[1280px] mx-auto px-3 sm:px-6 py-2">
+            <div className="relative w-full max-w-full rounded-full overflow-hidden border border-emerald-500/20 dark:border-stone-800 bg-slate-100/95 dark:bg-stone-900/95 shadow-2xs">
+              <nav
+                aria-label="Mobile Navigation Bar"
+                className="flex items-center justify-between sm:justify-start gap-0.5 sm:gap-1 overflow-x-auto no-scrollbar py-1 px-1 whitespace-nowrap flex-nowrap w-full max-w-full"
+              >
+                {mobileDesks.map((d) => {
+                  const IconComponent = d.Icon;
+                  const isActive = activeDesk === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => handleProtectedNavigate(d.id)}
+                      className={`min-h-[36px] sm:min-h-[40px] inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-full shrink-0 tracking-tight transition-all duration-200 active:scale-[0.98] cursor-pointer ${
                         isActive
-                          ? 'text-emerald-100'
-                          : 'text-emerald-700 dark:text-emerald-400'
+                          ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                          : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669]'
                       }`}
-                    />
-                    <span>{lang === 'en' ? d.en : d.bn}</span>
-                  </button>
-                );
-              })}
-            </nav>
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-slate-100 dark:from-stone-900 to-transparent"
-            />
+                    >
+                      <IconComponent
+                        className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${
+                          isActive
+                            ? 'text-emerald-100'
+                            : 'text-[#059669] dark:text-emerald-400'
+                        }`}
+                      />
+                      <span>{lang === 'en' ? d.en : d.bn}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
         </div>
 
@@ -2711,6 +2944,23 @@ export default function App() {
                 handleProtectedNavigate('tutor_upload')
               }
               onOpenGuardianModal={() => setIsGuardianModalOpen(true)}
+              onOpenTuitionCircularsDesk={() =>
+                handleProtectedNavigate('job_board')
+              }
+              verifiedTutorsCount={
+                tutors.filter((t) => t.nidVerified && t.uniIdVerified).length ||
+                tutors.length
+              }
+              onlineTutorsCount={
+                tutors.filter(
+                  (t) => Array.isArray(t.modes) && t.modes.includes('Online')
+                ).length
+              }
+              activeCircularsCount={
+                jobs.filter((j) => (j.status || 'Active') === 'Active').length ||
+                jobs.length
+              }
+              siteSocialSettings={siteSocialSettings}
             />
 
             <div id="live-tutor-directory" className="scroll-mt-20">
@@ -2731,6 +2981,7 @@ export default function App() {
                 onSwitchToUploadDesk={() =>
                   handleProtectedNavigate('tutor_upload')
                 }
+                isLoading={isLoadingCirculars}
               />
             </div>
           </div>
@@ -2754,6 +3005,7 @@ export default function App() {
             onSwitchToUploadDesk={() =>
               handleProtectedNavigate('tutor_upload')
             }
+            isLoading={isLoadingCirculars}
           />
         )}
 
@@ -2845,6 +3097,15 @@ export default function App() {
             }
             siteSocialSettings={siteSocialSettings}
             onSaveSiteSocialSettings={handleSaveSiteSocialSettings}
+            liveVerifiedTutorsCount={
+              tutors.filter((t) => t.nidVerified && t.uniIdVerified).length ||
+              tutors.length
+            }
+            liveOnlineTutorsCount={
+              tutors.filter(
+                (t) => Array.isArray(t.modes) && t.modes.includes('Online')
+              ).length
+            }
             paymentRequests={paymentRequests}
             onSubmitPaymentRequest={handleSubmitPaymentRequest}
             onAdminPaymentDecision={handleAdminPaymentDecision}
@@ -2903,8 +3164,8 @@ export default function App() {
       />
 
       {/* CLEAN & PREMIUM EDITORIAL FOOTER */}
-      <footer className="border-t border-stone-200/80 dark:border-stone-800 bg-white dark:bg-stone-900">
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24 sm:py-10 sm:pb-16">
+      <footer className="w-full max-w-full overflow-x-hidden border-t border-stone-200/80 dark:border-stone-800 bg-white dark:bg-stone-900">
+        <div className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24 sm:py-10 sm:pb-16">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-6 border-b border-stone-200/70 dark:border-stone-800/80">
             {/* Brand Logo & Tagline */}
             <div className="flex flex-col items-center md:items-start text-center md:text-left gap-1.5">

@@ -26,6 +26,29 @@ export type MediumCategory =
 
 export type CollegeTag =
   | 'All'
+  | 'Madaripur Govt. College (Govt. Nazimuddin College)'
+  | 'Govt. Sufia Mohila College, Madaripur'
+  | 'Govt. Barhamganj College, Shibchar'
+  | 'Kalkini Syed Abul Hossain College (Govt.)'
+  | "Govt. Sheikh Hasina Academy & Women's College, Dasar"
+  | 'Rajoir Gopalganj K.J.S. Pilot Model Institution & College'
+  | 'Rajoir Govt. Degree College'
+  | 'Shibchar Nandakumar Model Institution & College'
+  | 'Elias Ahmed Chowdhury Degree College, Shibchar'
+  | "Syed Abul Hossain Academy & Women's College, Madaripur"
+  | 'Charmuguria Merchant College, Madaripur'
+  | 'Khoajpur Tekerhat Fazlul Haque Degree College'
+  | 'Alhaj Aminuddin High School & College, Madaripur'
+  | 'Shashikar Shahid Smriti Degree College, Dasar'
+  | 'Khaserhat Syed Abul Hossain Degree College, Kalkini'
+  | 'Barthi Tara Prasanna High School & College'
+  | 'Kadambari Union Degree College, Rajoir'
+  | 'Rizvia Islamia Kamil Madrasah, Madaripur'
+  | 'Madaripur Technical School & College (TSC)'
+  | 'Public University (DU / BUET / JU / RU / JNU)'
+  | 'Medical College'
+  | 'National University (NU) Affiliated College'
+  | 'Private University / Other Institution'
   | 'Govt. Nazimuddin College'
   | 'Madaripur Govt. College'
   | 'DU'
@@ -203,19 +226,29 @@ export interface TutorProfile {
 
 export interface TuitionCircularRow {
   id?: string;
-  circular_id: string;
+  circular_id?: string;
   title: string;
-  class_subject: string;
+  class_subject?: string;
+  class_level?: string | null;
+  medium?: string | null;
+  subjects?: string | string[] | null;
   upazila: string;
-  location_details: string;
-  tutoring_format: string;
+  location_details?: string;
+  location?: string | null;
+  tutoring_format?: string;
   salary: number | string;
   days_per_week: number | string;
-  tutor_preference: string;
+  tutor_preference?: string;
+  tutor_gender?: string | null;
+  guardian_name?: string | null;
   guardian_phone: string;
+  guardian_address?: string | null;
   status: string;
   num_students?: number | string | null;
   hidden_from_admin?: boolean | null;
+  applicants?: unknown[] | null;
+  rejection_note?: string | null;
+  raw_data?: Record<string, any> | null;
   created_at?: string;
 }
 

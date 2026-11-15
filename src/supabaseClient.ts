@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://lqlumszqxnzmowfpioxf.supabase.co/';
+const SUPABASE_URL = 'https://lqlumszqxnzmowfpioxf.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_OWl0EbdYM5n2HUzWElzilg_NpfxQkO0';
 const SUPABASE_PUBLIC_KEY = SUPABASE_ANON_KEY;
 
@@ -35,7 +35,7 @@ if (typeof window !== 'undefined' && window.localStorage) {
   }
 }
 
-const customFetch = async (input, init) => {
+const customFetch: typeof fetch = async (input, init) => {
   const urlStr =
     typeof input === 'string'
       ? input
@@ -74,5 +74,3 @@ export const supabase = createClient(
 
 export { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_PUBLIC_KEY };
 export default supabase;
-
-

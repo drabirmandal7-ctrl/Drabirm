@@ -48,7 +48,10 @@ export function filterTutors(
       return false;
     }
 
-    if (filters.college !== 'All' && tutor.collegeTag !== filters.college) {
+    if (
+      filters.college !== 'All' &&
+      !matchesCollegeFilter(tutor, filters.college)
+    ) {
       return false;
     }
 
@@ -543,9 +546,9 @@ export function mapSupabaseSessionToUser(
 }
 
 export const UNSUBMITTED_PROFILE_BANNER_EN =
-  'Complete Your Profile — Please click Edit Profile Info to submit your details for verification.';
+  'Complete Your Profile — Please click Upload Profile to submit your details for verification.';
 export const UNSUBMITTED_PROFILE_BANNER_BN =
-  'Complete Your Profile — Please click Edit Profile Info to submit your details for verification.';
+  'Complete Your Profile — Please click Upload Profile to submit your details for verification.';
 export const PROFILE_FIELD_PLACEHOLDER = 'Not Provided Yet';
 export const NEW_ACCOUNT_HEADER_BADGE =
   'New Account · Profile Not Submitted';
@@ -825,6 +828,276 @@ export function mapTuitionJobToCircularRow(
   };
 }
 
+export function buildLiveSupabaseCircularInsertPayload(
+  job: TuitionJob
+): Record<string, any> {
+  const legacyRow = mapTuitionJobToCircularRow(job);
+  const cleanSubjects =
+    job.subjectsEn && job.subjectsEn.length > 0
+      ? job.subjectsEn.join(', ')
+      : legacyRow.class_subject || 'General Science & Math';
+  const cleanGuardianName = (job.guardianName || 'Verified Guardian').trim();
+
+  return {
+    id: job.id,
+    title: legacyRow.title,
+    class_level: (
+      job.studentClassEn ||
+      legacyRow.class_subject ||
+      'SSC / HSC'
+    ).trim(),
+    medium: (job.medium || 'Bangla Medium').trim(),
+    subjects: cleanSubjects,
+    location: legacyRow.location_details || legacyRow.upazila,
+    upazila: legacyRow.upazila,
+    salary: Number(legacyRow.salary) || 3000,
+    days_per_week: String(legacyRow.days_per_week || 3),
+    tutor_gender: legacyRow.tutor_preference || job.preferredGender || 'Any',
+    guardian_name: cleanGuardianName,
+    guardian_phone: legacyRow.guardian_phone,
+    guardian_address: legacyRow.location_details || legacyRow.upazila,
+    status: 'Active',
+    applicants: [],
+    rejection_note: null,
+    raw_data: {
+      ...legacyRow,
+      circular_id: job.id,
+      status: 'Active',
+      hidden_from_admin: false,
+      guardian_name: cleanGuardianName,
+      mode: job.mode || 'Home',
+      medium: job.medium || 'Bangla Medium',
+    },
+  };
+}
+
+export async function insertTuitionCircularToSupabase(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any,
+  job: TuitionJob
+): Promise<{ ok: boolean; error: { message: string } | null }> {
+  if (!supabaseClient || typeof supabaseClient.from !== 'function') {
+    return { ok: false, error: { message: 'Supabase client unavailable' } };
+  }
+
+  const legacyRow = mapTuitionJobToCircularRow(job);
+  const liveRow = buildLiveSupabaseCircularInsertPayload(job);
+
+  try {
+    // 1. Primary insert for live `public.tuition_circulars` table (`id`, `status: 'Active'`, `raw_data.hidden_from_admin: false`)
+    const primaryRes = await supabaseClient
+      .from('tuition_circulars')
+      .insert([liveRow]);
+
+    if (!primaryRes?.error) {
+      return { ok: true, error: null };
+    }
+
+    // 2. Fallback for `circular_id` + `hidden_from_admin` table schema
+    const secondaryRes = await supabaseClient
+      .from('tuition_circulars')
+      .insert([
+        {
+          ...legacyRow,
+          status: 'Active',
+          hidden_from_admin: false,
+        },
+      ]);
+
+    if (!secondaryRes?.error) {
+      return { ok: true, error: null };
+    }
+
+    // 3. Fallback for `circular_id` table schema without `hidden_from_admin`
+    const tertiaryRes = await supabaseClient
+      .from('tuition_circulars')
+      .insert([{ ...legacyRow, status: 'Active' }]);
+
+    if (!tertiaryRes?.error) {
+      return { ok: true, error: null };
+    }
+
+    return {
+      ok: false,
+      error: {
+        message:
+          primaryRes.error?.message ||
+          secondaryRes.error?.message ||
+          tertiaryRes.error?.message ||
+          'Failed to insert tuition circular',
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Failed to insert tuition circular',
+      },
+    };
+  }
+}
+
+export async function updateTuitionCircularInSupabase(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any,
+  circularId: string,
+  updates: {
+    status?: string;
+    guardian_phone?: string;
+    location_details?: string;
+  }
+): Promise<void> {
+  if (
+    !supabaseClient ||
+    typeof supabaseClient.from !== 'function' ||
+    !circularId
+  ) {
+    return;
+  }
+
+  const livePayload: Record<string, any> = {};
+  const legacyPayload: Record<string, any> = {};
+
+  if (updates.status !== undefined) {
+    livePayload.status = updates.status;
+    legacyPayload.status = updates.status;
+  }
+  if (updates.guardian_phone !== undefined) {
+    livePayload.guardian_phone = updates.guardian_phone;
+    legacyPayload.guardian_phone = updates.guardian_phone;
+  }
+  if (updates.location_details !== undefined) {
+    livePayload.location = updates.location_details;
+    livePayload.guardian_address = updates.location_details;
+    legacyPayload.location_details = updates.location_details;
+  }
+
+  try {
+    const res = await supabaseClient
+      .from('tuition_circulars')
+      .update(livePayload)
+      .eq('id', circularId);
+    if (res?.error) {
+      await supabaseClient
+        .from('tuition_circulars')
+        .update(legacyPayload)
+        .eq('circular_id', circularId);
+    }
+  } catch {
+    try {
+      await supabaseClient
+        .from('tuition_circulars')
+        .update(legacyPayload)
+        .eq('circular_id', circularId);
+    } catch {
+      // Ignore network errors
+    }
+  }
+}
+
+export async function hideTuitionCircularInSupabase(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any,
+  circularId: string
+): Promise<void> {
+  if (
+    !supabaseClient ||
+    typeof supabaseClient.from !== 'function' ||
+    !circularId
+  ) {
+    return;
+  }
+
+  try {
+    const existingRes = await supabaseClient
+      .from('tuition_circulars')
+      .select('id,raw_data')
+      .eq('id', circularId)
+      .limit(1);
+
+    if (
+      !existingRes?.error &&
+      Array.isArray(existingRes?.data) &&
+      existingRes.data.length > 0
+    ) {
+      const existingRaw =
+        existingRes.data[0]?.raw_data &&
+        typeof existingRes.data[0].raw_data === 'object'
+          ? existingRes.data[0].raw_data
+          : {};
+      await supabaseClient
+        .from('tuition_circulars')
+        .update({
+          raw_data: {
+            ...existingRaw,
+            hidden_from_admin: true,
+          },
+        })
+        .eq('id', circularId);
+      return;
+    }
+  } catch {
+    // Fallback below
+  }
+
+  try {
+    await supabaseClient
+      .from('tuition_circulars')
+      .update({ hidden_from_admin: true })
+      .eq('circular_id', circularId);
+  } catch {
+    // Ignore network errors
+  }
+}
+
+export async function deleteTuitionCircularFromSupabase(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any,
+  circularId: string
+): Promise<void> {
+  if (
+    !supabaseClient ||
+    typeof supabaseClient.from !== 'function' ||
+    !circularId
+  ) {
+    return;
+  }
+
+  try {
+    await supabaseClient
+      .from('circular_applications')
+      .delete()
+      .eq('circular_id', circularId);
+  } catch {
+    // Ignore application delete error
+  }
+
+  try {
+    const delById = await supabaseClient
+      .from('tuition_circulars')
+      .delete()
+      .eq('id', circularId);
+    if (delById?.error) {
+      await supabaseClient
+        .from('tuition_circulars')
+        .delete()
+        .eq('circular_id', circularId);
+    }
+  } catch {
+    try {
+      await supabaseClient
+        .from('tuition_circulars')
+        .delete()
+        .eq('circular_id', circularId);
+    } catch {
+      // Ignore circular delete error
+    }
+  }
+}
+
 export function sortCircularRowsNewestFirst(
   rows: TuitionCircularRow[]
 ): TuitionCircularRow[] {
@@ -838,7 +1111,14 @@ export function sortCircularRowsNewestFirst(
 export function mapCircularRowToTuitionJob(
   row: TuitionCircularRow
 ): TuitionJob {
-  const rawUpazila = (row.upazila || 'Madaripur Sadar').trim();
+  const rawData =
+    row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {};
+
+  const rawUpazila = (
+    row.upazila ||
+    rawData.upazila ||
+    'Madaripur Sadar'
+  ).trim();
   const matchedUpazila =
     VALID_UPAZILAS.find(
       (u) => u.toLowerCase() === rawUpazila.toLowerCase()
@@ -848,11 +1128,31 @@ export function mapCircularRowToTuitionJob(
     ) ||
     'Madaripur Sadar';
 
-  const landmark = (row.location_details || matchedUpazila).trim();
-
-  const rawClassSubject = (
-    row.class_subject || 'Class 9-10 · General Science & Math'
+  const landmark = (
+    row.location_details ||
+    rawData.location_details ||
+    row.location ||
+    row.guardian_address ||
+    rawData.landmarkEn ||
+    matchedUpazila
   ).trim();
+
+  const subjectsFromCol = Array.isArray(row.subjects)
+    ? row.subjects.join(', ')
+    : (row.subjects || '').trim();
+  const classLevelFromCol = (row.class_level || '').trim();
+  const combinedClassSubjectFromCols =
+    classLevelFromCol && subjectsFromCol
+      ? `${classLevelFromCol} · ${subjectsFromCol}`
+      : classLevelFromCol || subjectsFromCol;
+
+  const rawClassSubject: string = String(
+    row.class_subject ||
+      rawData.class_subject ||
+      combinedClassSubjectFromCols ||
+      'Class 9-10 · General Science & Math'
+  ).trim();
+
   let studentClass = rawClassSubject;
   let subjectsList = [rawClassSubject];
   if (rawClassSubject.includes('·')) {
@@ -862,7 +1162,7 @@ export function mapCircularRowToTuitionJob(
     subjectsList = joinedSubj
       ? joinedSubj
           .split(',')
-          .map((s) => s.trim())
+          .map((s: string) => s.trim())
           .filter(Boolean)
       : [rawClassSubject];
   } else if (rawClassSubject.includes(',')) {
@@ -871,12 +1171,19 @@ export function mapCircularRowToTuitionJob(
       studentClass = parts[0].trim();
       subjectsList = parts
         .slice(1)
-        .map((s) => s.trim())
+        .map((s: string) => s.trim())
         .filter(Boolean);
     }
   }
 
-  const rawFormat = (row.tutoring_format || 'Home · Bangla Medium').trim();
+  const rawMediumCol = (row.medium || rawData.medium || '').trim();
+  const rawModeCol = (rawData.mode || 'Home').trim();
+  const rawFormat = (
+    row.tutoring_format ||
+    rawData.tutoring_format ||
+    (rawMediumCol ? `${rawModeCol} · ${rawMediumCol}` : 'Home · Bangla Medium')
+  ).trim();
+
   const mode: TuitionJob['mode'] = rawFormat.toLowerCase().includes('online')
     ? 'Online'
     : rawFormat.toLowerCase().includes('group')
@@ -896,7 +1203,12 @@ export function mapCircularRowToTuitionJob(
     ? 'ICT'
     : 'Bangla Medium';
 
-  const rawPref = (row.tutor_preference || 'Any').trim();
+  const rawPref = (
+    row.tutor_preference ||
+    rawData.tutor_preference ||
+    row.tutor_gender ||
+    'Any'
+  ).trim();
   const preferredGender: 'Any' | 'Male' | 'Female' = rawPref
     .toLowerCase()
     .includes('female')
@@ -917,17 +1229,65 @@ export function mapCircularRowToTuitionJob(
     : 'Live Circular';
 
   const titleText = (
-    row.title || `${rawClassSubject} Tutor Needed in ${matchedUpazila}`
+    row.title ||
+    rawData.title ||
+    `${rawClassSubject} Tutor Needed in ${matchedUpazila}`
   ).trim();
 
-  const parsedSalary = Number(String(row.salary).replace(/[^\d.]/g, '')) || 3000;
+  const parsedSalary =
+    Number(String(row.salary ?? rawData.salary ?? '').replace(/[^\d.]/g, '')) ||
+    3000;
   const parsedDays =
-    Number(String(row.days_per_week).replace(/[^\d]/g, '')) || 3;
+    Number(
+      String(row.days_per_week ?? rawData.days_per_week ?? '').replace(
+        /[^\d]/g,
+        ''
+      )
+    ) || 3;
   const parsedNumStudents =
-    Number(String(row.num_students ?? '').replace(/[^\d]/g, '')) || 1;
+    Number(
+      String(
+        row.num_students ?? rawData.num_students ?? rawData.numStudents ?? ''
+      ).replace(/[^\d]/g, '')
+    ) || 1;
+
+  const resolvedId = (
+    row.circular_id ||
+    rawData.circular_id ||
+    row.id ||
+    rawData.id ||
+    `MDP-${Math.floor(2047 + Math.random() * 900)}`
+  ).trim();
+
+  const rawStatus = (row.status || rawData.status || 'Active').trim();
+  const normalizedStatus =
+    rawStatus.toLowerCase() === 'open' || rawStatus.toLowerCase() === 'active'
+      ? 'Active'
+      : rawStatus;
+
+  const guardianName = (
+    row.guardian_name ||
+    rawData.guardian_name ||
+    rawData.guardianName ||
+    'Verified Guardian'
+  ).trim();
+
+  const guardianPhone = (
+    row.guardian_phone ||
+    rawData.guardian_phone ||
+    rawData.contactPhone ||
+    ''
+  ).trim();
+
+  const hiddenFromAdmin = Boolean(
+    row.hidden_from_admin ??
+      rawData.hidden_from_admin ??
+      rawData.hiddenFromAdmin ??
+      false
+  );
 
   return {
-    id: row.circular_id || `MDP-${Math.floor(2047 + Math.random() * 900)}`,
+    id: resolvedId,
     titleEn: titleText,
     titleBn: titleText,
     studentClassEn: studentClass,
@@ -947,17 +1307,17 @@ export function mapCircularRowToTuitionJob(
     preferredInstitutionBn: 'যাচাইকৃত মাদারীপুর টিউটর',
     postedAgoEn: formattedDateEn,
     postedAgoBn: formattedDateEn,
-    guardianName: 'Verified Guardian',
-    contactPhone: (row.guardian_phone || '').trim(),
+    guardianName,
+    contactPhone: guardianPhone,
     requirements: titleText,
     classSubject: rawClassSubject,
     tutoringFormat: rawFormat,
     tutorPreference: rawPref,
-    status: (row.status || 'Active').trim(),
+    status: normalizedStatus,
     createdAt: row.created_at || new Date().toISOString(),
     applicantsCount: 0,
     urgent: true,
-    hiddenFromAdmin: Boolean(row.hidden_from_admin),
+    hiddenFromAdmin,
   };
 }
 
@@ -1063,6 +1423,9 @@ export function buildCircularApplicationRow(
   };
 }
 
+export const DUPLICATE_CIRCULAR_APPLICATION_MESSAGE =
+  'You have already applied to this tuition circular. You can apply once per circular.';
+
 export function isActiveApplicationRow(app: CircularApplicationRow): boolean {
   return (
     app.circular_id !== 'ARCHIVED-TEST' &&
@@ -1074,8 +1437,11 @@ export function getApplicationsForCircular(
   applications: CircularApplicationRow[],
   circularId: string
 ): CircularApplicationRow[] {
+  const targetCircularId = (circularId || '').trim();
   return applications.filter(
-    (app) => isActiveApplicationRow(app) && app.circular_id === circularId
+    (app) =>
+      isActiveApplicationRow(app) &&
+      (app.circular_id || '').trim() === targetCircularId
   );
 }
 
@@ -1161,6 +1527,11 @@ export function doesApplicationBelongToUser(
   )
     .trim()
     .toLowerCase();
+  const explicitUserId = (
+    typeof user === 'string' ? '' : user?.id || userProfile?.userId || ''
+  )
+    .trim()
+    .toLowerCase();
   const cleanUserId = (
     typeof user === 'string'
       ? user.split('@')[0]
@@ -1176,12 +1547,16 @@ export function doesApplicationBelongToUser(
   const appEmail = (app.user_email || '').trim().toLowerCase();
   const appUserId = (app.user_id || '').trim().toLowerCase();
 
-  // If the application has an explicit user_email recorded, check if it matches
+  // Primary check: user_id === currentUser.id OR LOWER(user_email) === LOWER(currentUser.email)
+  if (cleanEmail && appEmail && appEmail === cleanEmail) {
+    return true;
+  }
+  if (explicitUserId && appUserId && appUserId === explicitUserId) {
+    return true;
+  }
+
+  // If the application has an explicit user_email recorded, check if it matches profile email
   if (appEmail) {
-    if (cleanEmail && appEmail === cleanEmail) {
-      return true;
-    }
-    // If appEmail belongs to a completely different account, do not match unless userProfile has no conflicting email and matches tutor_id/phone
     const profileEmail = (userProfile?.userEmail || userProfile?.email || '')
       .trim()
       .toLowerCase();
@@ -1242,6 +1617,7 @@ export function hasTutorAlreadyAppliedToCircular(
     tutorId?: string | null;
     tutorPhone?: string | null;
     userEmail?: string | null;
+    userId?: string | null;
   }
 ): CircularApplicationRow | undefined {
   const existingForUser = getUserApplicationForCircular(
@@ -1256,14 +1632,18 @@ export function hasTutorAlreadyAppliedToCircular(
   const candidateId = normalizeLookupToken(candidateInput.tutorId);
   const candidatePhone = normalizeLookupToken(candidateInput.tutorPhone);
   const candidateEmail = (candidateInput.userEmail || '').trim().toLowerCase();
+  const candidateUserId = (candidateInput.userId || '').trim().toLowerCase();
 
   const circularApps = getApplicationsForCircular(applications, circularId);
   return circularApps.find((app) => {
     const appEmail = (app.user_email || '').trim().toLowerCase();
+    const appUserId = (app.user_id || '').trim().toLowerCase();
     const appId = normalizeLookupToken(app.tutor_id);
     const appPhone = normalizeLookupToken(app.tutor_phone);
 
     if (candidateEmail && appEmail && candidateEmail === appEmail) return true;
+    if (candidateUserId && appUserId && candidateUserId === appUserId)
+      return true;
     if (candidateId && appId && candidateId === appId) return true;
     if (candidatePhone && appPhone && candidatePhone === appPhone) return true;
     return false;
@@ -1382,10 +1762,7 @@ export function getCircularCardApplyButtonState(
 
     return {
       state: 'pending',
-      label:
-        lang === 'en'
-          ? '⏳ Application Under Review'
-          : '⏳ আবেদন পর্যালোচনাধীন',
+      label: 'Already Applied ✓',
       interactive: false,
     };
   }
@@ -1925,13 +2302,178 @@ export function extractCircularDetails(
   };
 }
 
+export const SPECIFIC_MADARIPUR_COLLEGES: Exclude<CollegeTag, 'All'>[] = [
+  'Madaripur Govt. College (Govt. Nazimuddin College)',
+  'Govt. Sufia Mohila College, Madaripur',
+  'Govt. Barhamganj College, Shibchar',
+  'Kalkini Syed Abul Hossain College (Govt.)',
+  "Govt. Sheikh Hasina Academy & Women's College, Dasar",
+  'Rajoir Gopalganj K.J.S. Pilot Model Institution & College',
+  'Rajoir Govt. Degree College',
+  'Shibchar Nandakumar Model Institution & College',
+  'Elias Ahmed Chowdhury Degree College, Shibchar',
+  "Syed Abul Hossain Academy & Women's College, Madaripur",
+  'Charmuguria Merchant College, Madaripur',
+  'Khoajpur Tekerhat Fazlul Haque Degree College',
+  'Alhaj Aminuddin High School & College, Madaripur',
+  'Shashikar Shahid Smriti Degree College, Dasar',
+  'Khaserhat Syed Abul Hossain Degree College, Kalkini',
+  'Barthi Tara Prasanna High School & College',
+  'Kadambari Union Degree College, Rajoir',
+  'Rizvia Islamia Kamil Madrasah, Madaripur',
+  'Madaripur Technical School & College (TSC)',
+];
+
+export const MADARIPUR_INSTITUTION_CATEGORIES: Exclude<CollegeTag, 'All'>[] = [
+  ...SPECIFIC_MADARIPUR_COLLEGES,
+  'Public University (DU / BUET / JU / RU / JNU)',
+  'Medical College',
+  'National University (NU) Affiliated College',
+  'Private University / Other Institution',
+];
+
+export const MADARIPUR_COLLEGE_LABELS_BN: Record<CollegeTag, string> = {
+  All: 'সকল প্রতিষ্ঠান',
+  'Madaripur Govt. College (Govt. Nazimuddin College)':
+    'মাদারীপুর সরকারি কলেজ (সরকারি নাজিমউদ্দিন কলেজ)',
+  'Govt. Sufia Mohila College, Madaripur':
+    'সরকারি সুফিয়া মহিলা কলেজ, মাদারীপুর',
+  'Govt. Barhamganj College, Shibchar': 'সরকারি বরহামগঞ্জ কলেজ, শিবচর',
+  'Kalkini Syed Abul Hossain College (Govt.)':
+    'কালকিনি সৈয়দ আবুল হোসেন কলেজ (সরকারি)',
+  "Govt. Sheikh Hasina Academy & Women's College, Dasar":
+    'সরকারি শেখ হাসিনা একাডেমি অ্যান্ড উইমেন্স কলেজ, ডাসার',
+  'Rajoir Gopalganj K.J.S. Pilot Model Institution & College':
+    'রাজৈর গোপালগঞ্জ কে.জে.এস. পাইলট মডেল ইনস্টিটিউশন ও কলেজ',
+  'Rajoir Govt. Degree College': 'রাজৈর সরকারি ডিগ্রি কলেজ',
+  'Shibchar Nandakumar Model Institution & College':
+    'শিবচর নন্দকুমার মডেল ইনস্টিটিউশন ও কলেজ',
+  'Elias Ahmed Chowdhury Degree College, Shibchar':
+    'ইলিয়াস আহমেদ চৌধুরী ডিগ্রি কলেজ, শিবচর',
+  "Syed Abul Hossain Academy & Women's College, Madaripur":
+    'সৈয়দ আবুল হোসেন একাডেমি অ্যান্ড উইমেন্স কলেজ, মাদারীপুর',
+  'Charmuguria Merchant College, Madaripur':
+    'চরমুগরিয়া মার্চেন্টস কলেজ, মাদারীপুর',
+  'Khoajpur Tekerhat Fazlul Haque Degree College':
+    'খোয়াজপুর টেকেরহাট ফজলুল হক ডিগ্রি কলেজ',
+  'Alhaj Aminuddin High School & College, Madaripur':
+    'আলহাজ্ব আমিনউদ্দিন হাই স্কুল অ্যান্ড কলেজ, মাদারীপুর',
+  'Shashikar Shahid Smriti Degree College, Dasar':
+    'শশিকর শহীদ স্মৃতি ডিগ্রি কলেজ, ডাসার',
+  'Khaserhat Syed Abul Hossain Degree College, Kalkini':
+    'খাসেরহাট সৈয়দ আবুল হোসেন ডিগ্রি কলেজ, কালকিনি',
+  'Barthi Tara Prasanna High School & College':
+    'বার্থী তারা প্রসন্ন উচ্চ বিদ্যালয় ও কলেজ',
+  'Kadambari Union Degree College, Rajoir':
+    'কদমবাড়ী ইউনিয়ন ডিগ্রি কলেজ, রাজৈর',
+  'Rizvia Islamia Kamil Madrasah, Madaripur':
+    'রিজভিয়া ইসলামিয়া কামিল মাদ্রাসা, মাদারীপুর',
+  'Madaripur Technical School & College (TSC)':
+    'মাদারীপুর টেকনিক্যাল স্কুল ও কলেজ (TSC)',
+  'Public University (DU / BUET / JU / RU / JNU)':
+    'পাবলিক বিশ্ববিদ্যালয় (ঢাবি / বুয়েট / জাবি / রাবি / জবি)',
+  'Medical College': 'মেডিকেল কলেজ',
+  'National University (NU) Affiliated College':
+    'জাতীয় বিশ্ববিদ্যালয় (NU) অধিভুক্ত কলেজ',
+  'Private University / Other Institution':
+    'বেসরকারি বিশ্ববিদ্যালয় / অন্যান্য প্রতিষ্ঠান',
+  'Govt. Nazimuddin College': 'সরকারি নাজিমউদ্দিন কলেজ',
+  'Madaripur Govt. College': 'মাদারীপুর সরকারি কলেজ',
+  DU: 'ঢাকা বিশ্ববিদ্যালয় (DU)',
+  BUET: 'বুয়েট (BUET)',
+  Medical: 'মেডিকেল কলেজ',
+};
+
 const VALID_COLLEGES: Exclude<CollegeTag, 'All'>[] = [
+  ...MADARIPUR_INSTITUTION_CATEGORIES,
   'Govt. Nazimuddin College',
   'Madaripur Govt. College',
   'DU',
   'BUET',
   'Medical',
 ];
+
+export function isSpecificMadaripurCollege(category: string): boolean {
+  const clean = (category || '').trim();
+  return SPECIFIC_MADARIPUR_COLLEGES.includes(
+    clean as Exclude<CollegeTag, 'All'>
+  );
+}
+
+export function resolveAutoFilledInstitutionName(
+  selectedCategory: string,
+  currentFullInstitutionName: string,
+  previousCategory?: string
+): string {
+  const cleanSelected = (selectedCategory || '').trim();
+  const cleanCurrent = (currentFullInstitutionName || '').trim();
+  const cleanPrev = (previousCategory || '').trim();
+
+  const isDefaultOrEmpty =
+    !cleanCurrent ||
+    (cleanPrev && cleanCurrent.toLowerCase() === cleanPrev.toLowerCase()) ||
+    VALID_COLLEGES.some(
+      (c) => c.toLowerCase() === cleanCurrent.toLowerCase()
+    );
+
+  if (isSpecificMadaripurCollege(cleanSelected)) {
+    if (isDefaultOrEmpty) {
+      return cleanSelected;
+    }
+    return cleanCurrent;
+  }
+
+  // If switching from a specific Madaripur college to a general category (e.g. Public University / Medical College)
+  // and the field only held the previous auto-filled college name, clear it so the tutor can type their university name
+  if (
+    cleanCurrent &&
+    SPECIFIC_MADARIPUR_COLLEGES.some(
+      (c) => c.toLowerCase() === cleanCurrent.toLowerCase()
+    )
+  ) {
+    return '';
+  }
+
+  return cleanCurrent;
+}
+
+export function matchesCollegeFilter(
+  tutor: TutorProfile,
+  selectedCollege: CollegeTag
+): boolean {
+  if (selectedCollege === 'All') return true;
+  if (tutor.collegeTag === selectedCollege) return true;
+
+  if (
+    selectedCollege ===
+      'Madaripur Govt. College (Govt. Nazimuddin College)' &&
+    (tutor.collegeTag === 'Govt. Nazimuddin College' ||
+      tutor.collegeTag === 'Madaripur Govt. College')
+  ) {
+    return true;
+  }
+
+  if (
+    (selectedCollege === 'Govt. Nazimuddin College' ||
+      selectedCollege === 'Madaripur Govt. College') &&
+    tutor.collegeTag === 'Madaripur Govt. College (Govt. Nazimuddin College)'
+  ) {
+    return true;
+  }
+
+  if (
+    selectedCollege === 'Public University (DU / BUET / JU / RU / JNU)' &&
+    (tutor.collegeTag === 'DU' || tutor.collegeTag === 'BUET')
+  ) {
+    return true;
+  }
+
+  if (selectedCollege === 'Medical College' && tutor.collegeTag === 'Medical') {
+    return true;
+  }
+
+  return false;
+}
 
 const VALID_MEDIUMS: Exclude<MediumCategory, 'All'>[] = [
   'Bangla Medium',
@@ -1956,6 +2498,10 @@ export interface TutorProfileFormInput {
   subjects?: string | string[] | null;
   profilePhotoName?: string | null;
   profilePhotoType?: string | null;
+  nidDocumentName?: string | null;
+  nidDocumentType?: string | null;
+  uniDocumentName?: string | null;
+  uniDocumentType?: string | null;
 }
 
 export function validateTutorProfileSubmission(
@@ -2020,6 +2566,36 @@ export function validateTutorProfileSubmission(
         valid: false,
         errorEn: photoCheck.error,
         errorBn: 'শুধুমাত্র JPG, JPEG অথবা PNG ফরম্যাটের ছবি গ্রহণযোগ্য।',
+      };
+    }
+  }
+
+  if (input.nidDocumentName && input.nidDocumentName.trim()) {
+    const nidCheck = validateNidOrStudentIdJpgFile(
+      input.nidDocumentName,
+      input.nidDocumentType || undefined
+    );
+    if (!nidCheck.valid) {
+      return {
+        valid: false,
+        errorEn: nidCheck.error,
+        errorBn:
+          'এনআইডি এবং স্টুডেন্ট আইডি কার্ডের জন্য শুধুমাত্র JPG (.jpg / .jpeg) ফাইল গ্রহণযোগ্য।',
+      };
+    }
+  }
+
+  if (input.uniDocumentName && input.uniDocumentName.trim()) {
+    const uniCheck = validateNidOrStudentIdJpgFile(
+      input.uniDocumentName,
+      input.uniDocumentType || undefined
+    );
+    if (!uniCheck.valid) {
+      return {
+        valid: false,
+        errorEn: uniCheck.error,
+        errorBn:
+          'এনআইডি এবং স্টুডেন্ট আইডি কার্ডের জন্য শুধুমাত্র JPG (.jpg / .jpeg) ফাইল গ্রহণযোগ্য।',
       };
     }
   }
@@ -2620,6 +3196,37 @@ export function validateProfilePhotoFile(
       valid: false,
       error:
         'Only JPG, JPEG, or PNG image files (.jpg, .jpeg, .png) are allowed for your Profile Photo.',
+    };
+  }
+
+  return { valid: true };
+}
+
+export const NID_STUDENT_ID_JPG_ONLY_ERROR =
+  'Only JPG (.jpg / .jpeg) files are allowed for NID and Student ID Card uploads.';
+
+export function validateNidOrStudentIdJpgFile(
+  fileName: string,
+  mimeType?: string
+): { valid: boolean; error?: string } {
+  const cleanName = (fileName || '').trim().toLowerCase();
+  const cleanMime = (mimeType || '').trim().toLowerCase();
+
+  if (!cleanName) {
+    return {
+      valid: false,
+      error: NID_STUDENT_ID_JPG_ONLY_ERROR,
+    };
+  }
+
+  const hasValidJpgExt = /\.(jpg|jpeg)$/i.test(cleanName);
+  const hasValidJpgMime =
+    !cleanMime || cleanMime === 'image/jpeg' || cleanMime === 'image/jpg';
+
+  if (!hasValidJpgExt || !hasValidJpgMime) {
+    return {
+      valid: false,
+      error: NID_STUDENT_ID_JPG_ONLY_ERROR,
     };
   }
 
@@ -3272,6 +3879,16 @@ export function markExplicitLoginIntent(bundle?: BrowserStorageBundle): void {
   }
 }
 
+let signUpFlowInProgressFlag = false;
+
+export function markSignUpFlowInProgress(active: boolean): void {
+  signUpFlowInProgressFlag = Boolean(active);
+}
+
+export function isSignUpFlowInProgress(): boolean {
+  return signUpFlowInProgressFlag;
+}
+
 export function hasFreshExplicitLoginIntent(
   bundle?: BrowserStorageBundle,
   maxAgeMs = 180_000
@@ -3619,11 +4236,17 @@ export function clearAllTutorZoneBrowserStorage(
 }
 
 export const SITE_SOCIAL_SETTINGS_STORAGE_KEY = 'tutor_zone_site_settings_v1';
+export const SITE_SOCIAL_SETTINGS_SESSION_KEY =
+  'tutor_zone_site_settings_session_v1';
 export const SOCIAL_LINKS_UPDATED_TOAST = 'Social links updated for all users!';
+export const HOMEPAGE_STATS_UPDATED_TOAST =
+  'Homepage & Stats Updated Successfully!';
 export const DEFAULT_BKASH_NUMBER = '01602393192';
 export const DEFAULT_NAGAD_NUMBER = '01602393192';
 export const DEFAULT_VERIFICATION_FEE_BDT = 500;
 export const PAYMENT_REQUESTS_STORAGE_KEY = 'tutor_zone_payment_requests_v1';
+
+export type HomepageStatsMode = 'auto' | 'manual';
 
 export interface SiteSocialSettings {
   id: number;
@@ -3632,6 +4255,22 @@ export interface SiteSocialSettings {
   bkashNumber?: string;
   nagadNumber?: string;
   verificationFee?: number;
+  stats_mode?: HomepageStatsMode;
+  manual_verified_tutors?: string;
+  manual_online_tutors?: string;
+  manual_active_circulars?: string;
+  manual_total_applications?: string;
+  trust_card_3_value?: string;
+  trust_card_3_label?: string;
+  trust_card_4_value?: string;
+  trust_card_4_label?: string;
+  hero_top_badge_1?: string;
+  hero_top_badge_2?: string;
+  hero_title?: string;
+  guardian_card_title?: string;
+  guardian_card_badge?: string;
+  tutor_card_title?: string;
+  tutor_card_desc?: string;
   rawData?: Record<string, unknown>;
   updatedAt?: string;
 }
@@ -3643,13 +4282,144 @@ export const DEFAULT_SITE_SOCIAL_SETTINGS: SiteSocialSettings = {
   bkashNumber: DEFAULT_BKASH_NUMBER,
   nagadNumber: DEFAULT_NAGAD_NUMBER,
   verificationFee: DEFAULT_VERIFICATION_FEE_BDT,
+  stats_mode: 'auto',
+  manual_verified_tutors: '120+',
+  manual_online_tutors: '45+',
+  manual_active_circulars: '30+',
+  manual_total_applications: '85',
+  trust_card_3_value: '100%',
+  trust_card_3_label: '100% Smart NID Verified',
+  trust_card_4_value: '< 24h',
+  trust_card_4_label: 'Fast Guardian Matching',
+  hero_top_badge_1: '🛡️ Manual NID & University ID Verification Workflow',
+  hero_top_badge_2: 'Verified Guardian Reviews',
+  hero_title: 'Verified home & online tutors',
+  guardian_card_title: 'Need a Verified Home/Online Tutor?',
+  guardian_card_badge: '2 Free Trial Classes',
+  tutor_card_title: 'Looking for Tuitions?',
+  tutor_card_desc:
+    'Verify your Smart NID & Student ID once to get the glowing Verified Tutor badge and apply directly to live guardian circulars across Madaripur.',
 };
+
+/**
+ * Resolves live homepage Trust Strip counters & hero copy based on `stats_mode` ('auto' vs 'manual').
+ */
+export function resolveHomepageLiveStats(
+  settings: Partial<SiteSocialSettings> | null | undefined,
+  autoCounts: {
+    verifiedTutorsCount: number;
+    onlineTutorsCount: number;
+    activeCircularsCount: number;
+    totalApplicationsCount?: number;
+  },
+  lang: Language = 'en'
+): {
+  statsMode: HomepageStatsMode;
+  verifiedTutorsDisplay: string;
+  onlineTutorsDisplay: string;
+  activeCircularsDisplay: string;
+  totalApplicationsDisplay: string;
+  trustCard3Value: string;
+  trustCard3Label: string;
+  trustCard4Value: string;
+  trustCard4Label: string;
+  heroTopBadge1: string;
+  heroTopBadge2: string;
+  heroTitle: string;
+  guardianCardTitle: string;
+  guardianCardBadge: string;
+  tutorCardTitle: string;
+  tutorCardDesc: string;
+} {
+  const s = { ...DEFAULT_SITE_SOCIAL_SETTINGS, ...(settings || {}) };
+  const statsMode: HomepageStatsMode =
+    s.stats_mode === 'manual' ? 'manual' : 'auto';
+
+  const autoVerifiedStr =
+    lang === 'bn'
+      ? `${toBanglaNumber(autoCounts.verifiedTutorsCount)}+`
+      : `${autoCounts.verifiedTutorsCount}+`;
+  const autoOnlineStr =
+    lang === 'bn'
+      ? `${toBanglaNumber(autoCounts.onlineTutorsCount)}+`
+      : `${autoCounts.onlineTutorsCount}+`;
+  const autoCircularsStr =
+    lang === 'bn'
+      ? `${toBanglaNumber(autoCounts.activeCircularsCount)}`
+      : `${autoCounts.activeCircularsCount}`;
+  const rawAutoApps = autoCounts.totalApplicationsCount ?? 0;
+  const autoApplicationsStr =
+    lang === 'bn' ? `${toBanglaNumber(rawAutoApps)}` : `${rawAutoApps}`;
+
+  return {
+    statsMode,
+    verifiedTutorsDisplay:
+      statsMode === 'manual'
+        ? (s.manual_verified_tutors || DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors!).trim()
+        : autoVerifiedStr,
+    onlineTutorsDisplay:
+      statsMode === 'manual'
+        ? (s.manual_online_tutors || DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors!).trim()
+        : autoOnlineStr,
+    activeCircularsDisplay:
+      statsMode === 'manual'
+        ? (s.manual_active_circulars || DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars!).trim()
+        : autoCircularsStr,
+    totalApplicationsDisplay:
+      statsMode === 'manual'
+        ? (s.manual_total_applications || DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications!).trim()
+        : autoApplicationsStr,
+    trustCard3Value: (
+      s.trust_card_3_value ||
+      (lang === 'bn' ? '১০০%' : DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value!)
+    ).trim(),
+    trustCard3Label: (
+      s.trust_card_3_label ||
+      (lang === 'bn'
+        ? '১০০% স্মার্ট এনআইডি যাচাইকৃত'
+        : DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label!)
+    ).trim(),
+    trustCard4Value: (
+      s.trust_card_4_value ||
+      (lang === 'bn'
+        ? '< ২৪ ঘণ্টা'
+        : DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value!)
+    ).trim(),
+    trustCard4Label: (
+      s.trust_card_4_label ||
+      (lang === 'bn'
+        ? 'দ্রুত অভিভাবক ম্যাচিং'
+        : DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label!)
+    ).trim(),
+    heroTopBadge1: (
+      s.hero_top_badge_1 || DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_1!
+    ).trim(),
+    heroTopBadge2: (
+      s.hero_top_badge_2 || DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_2!
+    ).trim(),
+    heroTitle: (
+      s.hero_title || DEFAULT_SITE_SOCIAL_SETTINGS.hero_title!
+    ).trim(),
+    guardianCardTitle: (
+      s.guardian_card_title || DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_title!
+    ).trim(),
+    guardianCardBadge: (
+      s.guardian_card_badge || DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_badge!
+    ).trim(),
+    tutorCardTitle: (
+      s.tutor_card_title || DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_title!
+    ).trim(),
+    tutorCardDesc: (
+      s.tutor_card_desc || DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_desc!
+    ).trim(),
+  };
+}
 
 /**
  * Normalizes a Facebook Page or Profile URL so it always opens cleanly in a new tab.
  */
 export function normalizeFacebookUrl(rawInput: string | null | undefined): string {
-  const trimmed = (rawInput || '').trim();
+  const trimmed = (rawInput || '').split('#tzcms=')[0].trim();
   if (!trimmed) return '';
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;
@@ -3792,13 +4562,145 @@ export function mapSiteSettingsRowToSocialSettings(
     };
   }
 
+  // Also decode optional `#tzcms=` JSON metadata if stored in facebookUrl
+  let cleanFacebookUrl = facebookUrl;
+  if (facebookUrl.includes('#tzcms=')) {
+    const [baseFb, encodedCms] = facebookUrl.split('#tzcms=');
+    cleanFacebookUrl = baseFb.trim();
+    if (encodedCms) {
+      try {
+        const parsedCms = JSON.parse(decodeURIComponent(encodedCms)) as Record<
+          string,
+          unknown
+        >;
+        rawDataObj = { ...(rawDataObj || {}), ...parsedCms };
+      } catch {
+        // Ignore malformed fragment
+      }
+    }
+  }
+
+  const pickCmsString = (keys: string[], defaultVal: string): string => {
+    for (const key of keys) {
+      if (typeof row[key] === 'string' && (row[key] as string).trim().length > 0) {
+        return (row[key] as string).trim();
+      }
+      if (
+        rawDataObj &&
+        typeof rawDataObj[key] === 'string' &&
+        (rawDataObj[key] as string).trim().length > 0
+      ) {
+        return (rawDataObj[key] as string).trim();
+      }
+    }
+    return defaultVal;
+  };
+
+  const rawStatsMode = pickCmsString(
+    ['stats_mode', 'statsMode'],
+    fallback.stats_mode || 'auto'
+  );
+  const stats_mode: HomepageStatsMode =
+    rawStatsMode === 'manual' ? 'manual' : 'auto';
+
+  const manual_verified_tutors = pickCmsString(
+    ['manual_verified_tutors', 'manualVerifiedTutors'],
+    fallback.manual_verified_tutors ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors!
+  );
+  const manual_online_tutors = pickCmsString(
+    ['manual_online_tutors', 'manualOnlineTutors'],
+    fallback.manual_online_tutors ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors!
+  );
+  const manual_active_circulars = pickCmsString(
+    ['manual_active_circulars', 'manualActiveCirculars'],
+    fallback.manual_active_circulars ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars!
+  );
+  const manual_total_applications = pickCmsString(
+    ['manual_total_applications', 'manualTotalApplications'],
+    fallback.manual_total_applications ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications!
+  );
+  const trust_card_3_value = pickCmsString(
+    ['trust_card_3_value', 'trustCard3Value'],
+    fallback.trust_card_3_value ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value!
+  );
+  const trust_card_3_label = pickCmsString(
+    ['trust_card_3_label', 'trustCard3Label'],
+    fallback.trust_card_3_label ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label!
+  );
+  const trust_card_4_value = pickCmsString(
+    ['trust_card_4_value', 'trustCard4Value'],
+    fallback.trust_card_4_value ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value!
+  );
+  const trust_card_4_label = pickCmsString(
+    ['trust_card_4_label', 'trustCard4Label'],
+    fallback.trust_card_4_label ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label!
+  );
+  const hero_top_badge_1 = pickCmsString(
+    ['hero_top_badge_1', 'heroTopBadge1'],
+    fallback.hero_top_badge_1 ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_1!
+  );
+  const hero_top_badge_2 = pickCmsString(
+    ['hero_top_badge_2', 'heroTopBadge2'],
+    fallback.hero_top_badge_2 ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_2!
+  );
+  const hero_title = pickCmsString(
+    ['hero_title', 'heroTitle'],
+    fallback.hero_title || DEFAULT_SITE_SOCIAL_SETTINGS.hero_title!
+  );
+  const guardian_card_title = pickCmsString(
+    ['guardian_card_title', 'guardianCardTitle'],
+    fallback.guardian_card_title ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_title!
+  );
+  const guardian_card_badge = pickCmsString(
+    ['guardian_card_badge', 'guardianCardBadge'],
+    fallback.guardian_card_badge ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_badge!
+  );
+  const tutor_card_title = pickCmsString(
+    ['tutor_card_title', 'tutorCardTitle'],
+    fallback.tutor_card_title ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_title!
+  );
+  const tutor_card_desc = pickCmsString(
+    ['tutor_card_desc', 'tutorCardDesc'],
+    fallback.tutor_card_desc ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_desc!
+  );
+
   return {
     id: 1,
-    facebookUrl,
+    facebookUrl: cleanFacebookUrl,
     whatsappContact,
     bkashNumber,
     nagadNumber,
     verificationFee,
+    stats_mode,
+    manual_verified_tutors,
+    manual_online_tutors,
+    manual_active_circulars,
+    manual_total_applications,
+    trust_card_3_value,
+    trust_card_3_label,
+    trust_card_4_value,
+    trust_card_4_label,
+    hero_top_badge_1,
+    hero_top_badge_2,
+    hero_title,
+    guardian_card_title,
+    guardian_card_badge,
+    tutor_card_title,
+    tutor_card_desc,
     ...(rawDataObj ? { rawData: rawDataObj } : {}),
     ...(updatedAt ? { updatedAt } : {}),
   };
@@ -3811,11 +4713,28 @@ export interface SocialStorageLike {
 }
 
 /**
- * Reads `SiteSocialSettings` from `localStorage` with fallback to `DEFAULT_SITE_SOCIAL_SETTINGS`.
+ * Reads `SiteSocialSettings` from `sessionStorage` / `localStorage` with fallback to `DEFAULT_SITE_SOCIAL_SETTINGS`.
  */
 export function readSiteSocialSettingsFromStorage(
   storage?: SocialStorageLike | null
 ): SiteSocialSettings {
+  if (storage === undefined && typeof window !== 'undefined') {
+    try {
+      const sessionRaw = window.sessionStorage.getItem(
+        SITE_SOCIAL_SETTINGS_SESSION_KEY
+      );
+      if (sessionRaw) {
+        const parsedSession = JSON.parse(sessionRaw) as Record<string, unknown>;
+        return mapSiteSettingsRowToSocialSettings(
+          parsedSession,
+          DEFAULT_SITE_SOCIAL_SETTINGS
+        );
+      }
+    } catch {
+      // Fallback to localStorage
+    }
+  }
+
   const targetStorage =
     storage !== undefined
       ? storage
@@ -3838,7 +4757,7 @@ export function readSiteSocialSettingsFromStorage(
 }
 
 /**
- * Persists `SiteSocialSettings` (`id = 1`) into `localStorage`.
+ * Persists `SiteSocialSettings` (`id = 1`) into `localStorage` and `sessionStorage`.
  */
 export function writeSiteSocialSettingsToStorage(
   settings: Partial<SiteSocialSettings>,
@@ -3854,7 +4773,7 @@ export function writeSiteSocialSettingsToStorage(
     id: 1,
     facebookUrl:
       settings.facebookUrl !== undefined
-        ? settings.facebookUrl.trim()
+        ? settings.facebookUrl.split('#tzcms=')[0].trim()
         : current.facebookUrl,
     whatsappContact:
       settings.whatsappContact !== undefined
@@ -3872,9 +4791,104 @@ export function writeSiteSocialSettingsToStorage(
       settings.verificationFee !== undefined && Number(settings.verificationFee) > 0
         ? Number(settings.verificationFee)
         : current.verificationFee || DEFAULT_VERIFICATION_FEE_BDT,
+    stats_mode:
+      settings.stats_mode !== undefined
+        ? settings.stats_mode
+        : current.stats_mode || DEFAULT_SITE_SOCIAL_SETTINGS.stats_mode,
+    manual_verified_tutors:
+      settings.manual_verified_tutors !== undefined
+        ? settings.manual_verified_tutors.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors
+        : current.manual_verified_tutors ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors,
+    manual_online_tutors:
+      settings.manual_online_tutors !== undefined
+        ? settings.manual_online_tutors.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors
+        : current.manual_online_tutors ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors,
+    manual_active_circulars:
+      settings.manual_active_circulars !== undefined
+        ? settings.manual_active_circulars.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars
+        : current.manual_active_circulars ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars,
+    manual_total_applications:
+      settings.manual_total_applications !== undefined
+        ? settings.manual_total_applications.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications
+        : current.manual_total_applications ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications,
+    trust_card_3_value:
+      settings.trust_card_3_value !== undefined
+        ? settings.trust_card_3_value.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value
+        : current.trust_card_3_value ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value,
+    trust_card_3_label:
+      settings.trust_card_3_label !== undefined
+        ? settings.trust_card_3_label.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label
+        : current.trust_card_3_label ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label,
+    trust_card_4_value:
+      settings.trust_card_4_value !== undefined
+        ? settings.trust_card_4_value.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value
+        : current.trust_card_4_value ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value,
+    trust_card_4_label:
+      settings.trust_card_4_label !== undefined
+        ? settings.trust_card_4_label.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label
+        : current.trust_card_4_label ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label,
+    hero_top_badge_1:
+      settings.hero_top_badge_1 !== undefined
+        ? settings.hero_top_badge_1.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_1
+        : current.hero_top_badge_1 ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_1,
+    hero_top_badge_2:
+      settings.hero_top_badge_2 !== undefined
+        ? settings.hero_top_badge_2.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_2
+        : current.hero_top_badge_2 ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_2,
+    hero_title:
+      settings.hero_title !== undefined
+        ? settings.hero_title.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_title
+        : current.hero_title || DEFAULT_SITE_SOCIAL_SETTINGS.hero_title,
+    guardian_card_title:
+      settings.guardian_card_title !== undefined
+        ? settings.guardian_card_title.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_title
+        : current.guardian_card_title ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_title,
+    guardian_card_badge:
+      settings.guardian_card_badge !== undefined
+        ? settings.guardian_card_badge.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_badge
+        : current.guardian_card_badge ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_badge,
+    tutor_card_title:
+      settings.tutor_card_title !== undefined
+        ? settings.tutor_card_title.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_title
+        : current.tutor_card_title ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_title,
+    tutor_card_desc:
+      settings.tutor_card_desc !== undefined
+        ? settings.tutor_card_desc.trim() ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_desc
+        : current.tutor_card_desc ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_desc,
     ...(Object.keys(resolvedRawData).length > 0 ? { rawData: resolvedRawData } : {}),
     updatedAt: settings.updatedAt || new Date().toISOString(),
   };
+
+  const serialized = JSON.stringify(next);
 
   const targetStorage =
     storage !== undefined
@@ -3885,9 +4899,17 @@ export function writeSiteSocialSettingsToStorage(
 
   if (targetStorage) {
     try {
-      targetStorage.setItem(SITE_SOCIAL_SETTINGS_STORAGE_KEY, JSON.stringify(next));
+      targetStorage.setItem(SITE_SOCIAL_SETTINGS_STORAGE_KEY, serialized);
     } catch {
       // Ignore storage quota or security errors
+    }
+  }
+
+  if (storage === undefined && typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.setItem(SITE_SOCIAL_SETTINGS_SESSION_KEY, serialized);
+    } catch {
+      // Ignore sessionStorage errors
     }
   }
 
@@ -3897,8 +4919,8 @@ export function writeSiteSocialSettingsToStorage(
 const siteSettingsClientKnownColumns = new WeakMap<object, Set<string>>();
 
 /**
- * Fetches live social & payment settings from Supabase `public.site_settings` (`id = 1`)
- * and syncs them with `localStorage`.
+ * Fetches live social, payment & homepage CMS settings from Supabase `public.site_settings` (`id = 1`)
+ * and caches them in `sessionStorage` and `localStorage`.
  */
 export async function fetchSiteSocialSettingsFromSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3942,19 +4964,13 @@ export async function fetchSiteSocialSettingsFromSupabase(
 }
 
 /**
- * Saves and publishes the Admin-configured Facebook, WhatsApp, bKash & Nagad settings to
- * Supabase `public.site_settings` (`id = 1`) and `localStorage` with a single query.
+ * Saves and publishes Admin-configured Social, Payment, and Homepage & Live Stats CMS settings to
+ * Supabase `public.site_settings` (`id = 1`) and `sessionStorage` / `localStorage` with a single query.
  */
 export async function saveSiteSocialSettingsToSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseClient: any,
-  input: {
-    facebookUrl?: string;
-    whatsappContact?: string;
-    bkashNumber?: string;
-    nagadNumber?: string;
-    verificationFee?: number;
-  },
+  input: Partial<SiteSocialSettings>,
   storage?: SocialStorageLike | null
 ): Promise<{
   success: boolean;
@@ -3966,24 +4982,9 @@ export async function saveSiteSocialSettingsToSupabase(
   const updatedAt = new Date().toISOString();
   const savedLocal = writeSiteSocialSettingsToStorage(
     {
+      ...currentLocal,
+      ...input,
       id: 1,
-      facebookUrl:
-        input.facebookUrl !== undefined
-          ? input.facebookUrl.trim()
-          : currentLocal.facebookUrl,
-      whatsappContact:
-        input.whatsappContact !== undefined
-          ? input.whatsappContact.trim()
-          : currentLocal.whatsappContact,
-      ...(input.bkashNumber !== undefined
-        ? { bkashNumber: input.bkashNumber.trim() }
-        : {}),
-      ...(input.nagadNumber !== undefined
-        ? { nagadNumber: input.nagadNumber.trim() }
-        : {}),
-      ...(input.verificationFee !== undefined
-        ? { verificationFee: Number(input.verificationFee) }
-        : {}),
       updatedAt,
     },
     storage
@@ -3995,6 +4996,24 @@ export async function saveSiteSocialSettingsToSupabase(
     input.nagadNumber !== undefined ||
     input.verificationFee !== undefined;
 
+  const hasExplicitHomepageCmsSettings =
+    input.stats_mode !== undefined ||
+    input.manual_verified_tutors !== undefined ||
+    input.manual_online_tutors !== undefined ||
+    input.manual_active_circulars !== undefined ||
+    input.manual_total_applications !== undefined ||
+    input.trust_card_3_value !== undefined ||
+    input.trust_card_3_label !== undefined ||
+    input.trust_card_4_value !== undefined ||
+    input.trust_card_4_label !== undefined ||
+    input.hero_top_badge_1 !== undefined ||
+    input.hero_top_badge_2 !== undefined ||
+    input.hero_title !== undefined ||
+    input.guardian_card_title !== undefined ||
+    input.guardian_card_badge !== undefined ||
+    input.tutor_card_title !== undefined ||
+    input.tutor_card_desc !== undefined;
+
   if (supabaseClient && typeof supabaseClient.from === 'function') {
     const knownCols = siteSettingsClientKnownColumns.get(
       supabaseClient as object
@@ -4005,7 +5024,114 @@ export async function saveSiteSocialSettingsToSupabase(
         knownCols.has('nagad_number') &&
         knownCols.has('verification_fee'));
 
+    const supportsHomepageCmsCols =
+      !knownCols ||
+      (knownCols.has('stats_mode') && knownCols.has('hero_title'));
+
+    const cmsMetadataPayload: Record<string, unknown> = {
+      stats_mode: savedLocal.stats_mode || 'auto',
+      manual_verified_tutors: savedLocal.manual_verified_tutors,
+      manual_online_tutors: savedLocal.manual_online_tutors,
+      manual_active_circulars: savedLocal.manual_active_circulars,
+      manual_total_applications: savedLocal.manual_total_applications,
+      trust_card_3_value: savedLocal.trust_card_3_value,
+      trust_card_3_label: savedLocal.trust_card_3_label,
+      trust_card_4_value: savedLocal.trust_card_4_value,
+      trust_card_4_label: savedLocal.trust_card_4_label,
+      hero_top_badge_1: savedLocal.hero_top_badge_1,
+      hero_top_badge_2: savedLocal.hero_top_badge_2,
+      hero_title: savedLocal.hero_title,
+      guardian_card_title: savedLocal.guardian_card_title,
+      guardian_card_badge: savedLocal.guardian_card_badge,
+      tutor_card_title: savedLocal.tutor_card_title,
+      tutor_card_desc: savedLocal.tutor_card_desc,
+    };
+
+    const facebookWithCmsFragment = `${savedLocal.facebookUrl}#tzcms=${encodeURIComponent(
+      JSON.stringify(cmsMetadataPayload)
+    )}`;
+
     const candidatePayloads: Record<string, unknown>[] = [];
+
+    if (hasExplicitHomepageCmsSettings && supportsHomepageCmsCols) {
+      if (!knownCols || knownCols.has('manual_total_applications')) {
+        candidatePayloads.push({
+          id: 1,
+          facebook_url: savedLocal.facebookUrl,
+          whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+          bkash_number: savedLocal.bkashNumber || DEFAULT_BKASH_NUMBER,
+          nagad_number: savedLocal.nagadNumber || DEFAULT_NAGAD_NUMBER,
+          verification_fee:
+            savedLocal.verificationFee || DEFAULT_VERIFICATION_FEE_BDT,
+          ...cmsMetadataPayload,
+          updated_at: updatedAt,
+        });
+      }
+      candidatePayloads.push({
+        id: 1,
+        facebook_url: facebookWithCmsFragment,
+        whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+        bkash_number: savedLocal.bkashNumber || DEFAULT_BKASH_NUMBER,
+        nagad_number: savedLocal.nagadNumber || DEFAULT_NAGAD_NUMBER,
+        verification_fee:
+          savedLocal.verificationFee || DEFAULT_VERIFICATION_FEE_BDT,
+        stats_mode: savedLocal.stats_mode || 'auto',
+        manual_verified_tutors: savedLocal.manual_verified_tutors,
+        manual_online_tutors: savedLocal.manual_online_tutors,
+        manual_active_circulars: savedLocal.manual_active_circulars,
+        trust_card_3_value: savedLocal.trust_card_3_value,
+        trust_card_3_label: savedLocal.trust_card_3_label,
+        trust_card_4_value: savedLocal.trust_card_4_value,
+        trust_card_4_label: savedLocal.trust_card_4_label,
+        hero_top_badge_1: savedLocal.hero_top_badge_1,
+        hero_top_badge_2: savedLocal.hero_top_badge_2,
+        hero_title: savedLocal.hero_title,
+        guardian_card_title: savedLocal.guardian_card_title,
+        guardian_card_badge: savedLocal.guardian_card_badge,
+        tutor_card_title: savedLocal.tutor_card_title,
+        tutor_card_desc: savedLocal.tutor_card_desc,
+        updated_at: updatedAt,
+      });
+    }
+
+    if (hasExplicitHomepageCmsSettings) {
+      if (!knownCols || knownCols.has('raw_data')) {
+        candidatePayloads.push({
+          id: 1,
+          facebook_url: savedLocal.facebookUrl,
+          whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+          bkash_number: savedLocal.bkashNumber || DEFAULT_BKASH_NUMBER,
+          nagad_number: savedLocal.nagadNumber || DEFAULT_NAGAD_NUMBER,
+          verification_fee:
+            savedLocal.verificationFee || DEFAULT_VERIFICATION_FEE_BDT,
+          raw_data: cmsMetadataPayload,
+          updated_at: updatedAt,
+        });
+      }
+      if (supportsPaymentCols) {
+        candidatePayloads.push({
+          id: 1,
+          facebook_url: facebookWithCmsFragment,
+          whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+          bkash_number: savedLocal.bkashNumber || DEFAULT_BKASH_NUMBER,
+          nagad_number: savedLocal.nagadNumber || DEFAULT_NAGAD_NUMBER,
+          verification_fee:
+            savedLocal.verificationFee || DEFAULT_VERIFICATION_FEE_BDT,
+          updated_at: updatedAt,
+        });
+      }
+      candidatePayloads.push({
+        id: 1,
+        facebook_url: facebookWithCmsFragment,
+        whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+        updated_at: updatedAt,
+      });
+      candidatePayloads.push({
+        id: 1,
+        facebook_url: facebookWithCmsFragment,
+        whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+      });
+    }
 
     if (hasExplicitPaymentSettings && supportsPaymentCols) {
       candidatePayloads.push({
@@ -4058,7 +5184,9 @@ export async function saveSiteSocialSettingsToSupabase(
     success: true,
     settings: savedLocal,
     syncedToSupabase,
-    message: SOCIAL_LINKS_UPDATED_TOAST,
+    message: hasExplicitHomepageCmsSettings
+      ? HOMEPAGE_STATS_UPDATED_TOAST
+      : SOCIAL_LINKS_UPDATED_TOAST,
   };
 }
 
@@ -4213,13 +5341,25 @@ export function buildPaymentRequestRow(
 }
 
 export function mapPaymentRequestRowToRecord(
-  row: PaymentRequestRow
+  row: PaymentRequestRow & Record<string, any>
 ): PaymentRequestRecord {
-  const rawMethod = (row.payment_method || 'bKash').toString().trim();
+  const rawData =
+    row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {};
+  const rawMethod = (
+    row.payment_method ||
+    row.method ||
+    rawData.payment_method ||
+    'bKash'
+  )
+    .toString()
+    .trim();
   const paymentMethod: PaymentMethod =
     rawMethod.toLowerCase() === 'nagad' ? 'Nagad' : 'bKash';
 
-  const rawStatus = (row.status || 'Pending').toString().trim().toLowerCase();
+  const rawStatus = (row.status || rawData.status || 'Pending')
+    .toString()
+    .trim()
+    .toLowerCase();
   const status: PaymentRequestStatus =
     rawStatus === 'approved' || rawStatus === 'verified'
       ? 'Approved'
@@ -4227,9 +5367,16 @@ export function mapPaymentRequestRowToRecord(
       ? 'Rejected'
       : 'Pending';
 
-  const rawTrx = (row.transaction_id || '').trim().toUpperCase();
+  const rawTrx = (
+    row.transaction_id ||
+    row.trx_id ||
+    rawData.transaction_id ||
+    ''
+  )
+    .trim()
+    .toUpperCase();
   const requestCode =
-    (row.request_code || '').trim() ||
+    (row.request_code || rawData.request_code || '').trim() ||
     (rawTrx ? `PAY-${rawTrx}` : row.id ? String(row.id) : 'PAY-2026');
   const id = (row.id ? String(row.id) : requestCode).trim();
 
@@ -4244,35 +5391,63 @@ export function mapPaymentRequestRowToRecord(
         })
       : row.created_at || 'Just now';
 
-  const cleanEmail = (row.user_email || '').trim().toLowerCase() || undefined;
+  const cleanEmail =
+    (row.user_email || rawData.user_email || '').trim().toLowerCase() ||
+    undefined;
   const cleanUserId =
-    (row.user_id || '').trim() ||
+    (row.user_id || rawData.user_id || '').trim() ||
     (cleanEmail ? cleanEmail.split('@')[0] : undefined);
   const cleanTutorName =
-    (row.user_name || row.tutor_name || '').trim() ||
-    (cleanEmail ? cleanEmail.split('@')[0] : 'Tutor Applicant');
+    (
+      row.user_name ||
+      row.tutor_name ||
+      rawData.user_name ||
+      rawData.tutor_name ||
+      ''
+    ).trim() || (cleanEmail ? cleanEmail.split('@')[0] : 'Tutor Applicant');
 
   return {
     id,
     requestCode,
     userId: cleanUserId,
     userEmail: cleanEmail,
-    tutorId: (row.tutor_id || '').trim() || undefined,
+    tutorId:
+      (row.tutor_id || rawData.tutor_id || '').trim() || undefined,
     tutorName: cleanTutorName,
     paymentMethod,
-    senderNumber: (row.sender_number || '').trim(),
+    senderNumber: (
+      row.sender_number ||
+      row.phone ||
+      rawData.sender_number ||
+      ''
+    ).trim(),
     transactionId: rawTrx,
     amount:
-      Number(String(row.amount).replace(/[^\d.]/g, '')) ||
+      Number(String(row.amount ?? rawData.amount ?? '').replace(/[^\d.]/g, '')) ||
       DEFAULT_VERIFICATION_FEE_BDT,
-    purpose: (row.purpose || '').trim() || 'Profile Verification Fee',
-    circularId: (row.circular_id || '').trim() || undefined,
-    circularTitle: (row.circular_title || '').trim() || undefined,
-    guardianPhone: (row.guardian_phone || '').trim() || undefined,
-    guardianAddress: (row.guardian_address || '').trim() || undefined,
+    purpose:
+      (row.purpose || rawData.purpose || '').trim() ||
+      'Profile Verification Fee',
+    circularId:
+      (row.circular_id || rawData.circular_id || '').trim() || undefined,
+    circularTitle:
+      (row.circular_title || rawData.circular_title || '').trim() || undefined,
+    guardianPhone:
+      (row.guardian_phone || rawData.guardian_phone || '').trim() || undefined,
+    guardianAddress:
+      (row.guardian_address || rawData.guardian_address || '').trim() ||
+      undefined,
     status,
-    adminNote: (row.admin_note || '').trim() || undefined,
-    hiddenFromAdmin: Boolean(row.hidden_from_admin),
+    adminNote:
+      (
+        row.admin_note ||
+        row.rejection_note ||
+        rawData.admin_note ||
+        ''
+      ).trim() || undefined,
+    hiddenFromAdmin: Boolean(
+      row.hidden_from_admin ?? rawData.hidden_from_admin ?? false
+    ),
     createdAt,
   };
 }
@@ -4637,22 +5812,56 @@ export async function submitPaymentRequestToSupabase(
   let syncedToSupabase = false;
 
   if (supabaseClient && typeof supabaseClient.from === 'function') {
+    const livePayRow = {
+      id: `PAY-${row.transaction_id || Date.now()}`,
+      tutor_id: tutorProfile?.id || userAccount?.id || row.user_email || null,
+      tutor_name: row.user_name || 'Verified Tutor',
+      phone: row.sender_number,
+      method: row.payment_method,
+      trx_id: row.transaction_id,
+      amount: row.amount,
+      purpose: row.purpose,
+      circular_id: row.circular_id,
+      status: 'Pending',
+      rejection_note: null,
+      raw_data: row,
+    };
+
     try {
       const insertChain = supabaseClient.from('payment_requests').insert([row]);
       if (typeof insertChain.select === 'function') {
         const selected = insertChain.select();
         if (selected && typeof selected.maybeSingle === 'function') {
-          const res = await selected.maybeSingle();
+          let res = await selected.maybeSingle();
+          if (res.error) {
+            const fbChain = supabaseClient
+              .from('payment_requests')
+              .insert([livePayRow])
+              .select();
+            res =
+              typeof fbChain.maybeSingle === 'function'
+                ? await fbChain.maybeSingle()
+                : await fbChain;
+          }
           if (!res.error && res.data) {
-            finalRecord = mapPaymentRequestRowToRecord(
-              res.data as PaymentRequestRow
-            );
+            const rowData = Array.isArray(res.data) ? res.data[0] : res.data;
+            if (rowData) {
+              finalRecord = mapPaymentRequestRowToRecord(
+                rowData as PaymentRequestRow
+              );
+            }
             syncedToSupabase = true;
           } else if (!res.error) {
             syncedToSupabase = true;
           }
         } else {
-          const res = await selected;
+          let res = await selected;
+          if (res.error) {
+            res = await supabaseClient
+              .from('payment_requests')
+              .insert([livePayRow])
+              .select();
+          }
           if (!res.error && Array.isArray(res.data) && res.data.length > 0) {
             finalRecord = mapPaymentRequestRowToRecord(
               res.data[0] as PaymentRequestRow
@@ -4663,7 +5872,12 @@ export async function submitPaymentRequestToSupabase(
           }
         }
       } else {
-        const res = await insertChain;
+        let res = await insertChain;
+        if (res?.error) {
+          res = await supabaseClient
+            .from('payment_requests')
+            .insert([livePayRow]);
+        }
         if (!res?.error) {
           syncedToSupabase = true;
         }
@@ -4926,15 +6140,27 @@ export async function fetchSiteNoticesFromSupabase(
     if (error || !Array.isArray(data)) {
       return fallback;
     }
-    const mapped: SiteNotice[] = data.map((row: any) => ({
-      id: String(row.id),
-      title: String(row.title || ''),
-      content: String(row.content || ''),
-      badge_text: row.badge_text ? String(row.badge_text) : 'Official Notice',
-      image_url: row.image_url ? String(row.image_url) : undefined,
-      is_active: row.is_active !== false,
-      created_at: row.created_at ? String(row.created_at) : undefined,
-    }));
+    const mapped: SiteNotice[] = data.map((row: any) => {
+      const rawData =
+        row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {};
+      return {
+        id: String(row.id),
+        title: String(row.title || ''),
+        content: String(row.content || ''),
+        badge_text: row.badge_text
+          ? String(row.badge_text)
+          : rawData.badge_text
+          ? String(rawData.badge_text)
+          : 'Official Notice',
+        image_url: row.image_url
+          ? String(row.image_url)
+          : rawData.image_url
+          ? String(rawData.image_url)
+          : undefined,
+        is_active: row.is_active !== false,
+        created_at: row.created_at ? String(row.created_at) : undefined,
+      };
+    });
     writeSiteNoticesToStorage(mapped, storage);
     return mapped;
   } catch {
@@ -4963,39 +6189,88 @@ export async function saveSiteNoticeToSupabase(
     is_active: noticeInput.is_active !== false,
   };
 
+  const liveNoticeId =
+    noticeInput.id && !noticeInput.id.startsWith('local-')
+      ? noticeInput.id
+      : `NOTICE-${Date.now()}`;
+  const livePayload: Record<string, any> = {
+    id: liveNoticeId,
+    title: payload.title,
+    content: payload.content,
+    is_active: payload.is_active,
+    raw_data: {
+      badge_text: payload.badge_text,
+      image_url: payload.image_url,
+    },
+  };
+
   let savedNotice: SiteNotice | null = null;
 
   if (supabaseClient && typeof supabaseClient.from === 'function') {
     try {
       if (noticeInput.id && !noticeInput.id.startsWith('local-')) {
-        const { data, error } = await supabaseClient
+        let { data, error } = await supabaseClient
           .from('site_notices')
           .update(payload)
           .eq('id', noticeInput.id)
           .select();
+        if (error) {
+          const fallbackRes = await supabaseClient
+            .from('site_notices')
+            .update({
+              title: livePayload.title,
+              content: livePayload.content,
+              is_active: livePayload.is_active,
+              raw_data: livePayload.raw_data,
+            })
+            .eq('id', noticeInput.id)
+            .select();
+          data = fallbackRes.data;
+          error = fallbackRes.error;
+        }
         if (!error && Array.isArray(data) && data[0]) {
           savedNotice = {
             id: String(data[0].id),
             title: String(data[0].title || ''),
             content: String(data[0].content || ''),
-            badge_text: data[0].badge_text || payload.badge_text,
-            image_url: data[0].image_url || undefined,
+            badge_text:
+              data[0].badge_text ||
+              data[0].raw_data?.badge_text ||
+              payload.badge_text,
+            image_url:
+              data[0].image_url ||
+              data[0].raw_data?.image_url ||
+              undefined,
             is_active: data[0].is_active !== false,
             created_at: data[0].created_at || new Date().toISOString(),
           };
         }
       } else {
-        const { data, error } = await supabaseClient
+        let { data, error } = await supabaseClient
           .from('site_notices')
           .insert([payload])
           .select();
+        if (error) {
+          const fallbackRes = await supabaseClient
+            .from('site_notices')
+            .insert([livePayload])
+            .select();
+          data = fallbackRes.data;
+          error = fallbackRes.error;
+        }
         if (!error && Array.isArray(data) && data[0]) {
           savedNotice = {
             id: String(data[0].id),
             title: String(data[0].title || ''),
             content: String(data[0].content || ''),
-            badge_text: data[0].badge_text || payload.badge_text,
-            image_url: data[0].image_url || undefined,
+            badge_text:
+              data[0].badge_text ||
+              data[0].raw_data?.badge_text ||
+              payload.badge_text,
+            image_url:
+              data[0].image_url ||
+              data[0].raw_data?.image_url ||
+              undefined,
             is_active: data[0].is_active !== false,
             created_at: data[0].created_at || new Date().toISOString(),
           };
@@ -5203,10 +6478,18 @@ export function decodeGuardianExtendedNotes(rawNotes?: string | null): {
 }
 
 export function mapGuardianRowToRecord(row: any): GuardianRequestRecord {
-  const decoded = decodeGuardianExtendedNotes(row.additional_notes);
-  const rawClass = String(row.student_class || '');
+  const rawData =
+    row?.raw_data && typeof row.raw_data === 'object' ? row.raw_data : {};
+  const decoded = decodeGuardianExtendedNotes(
+    row.additional_notes ?? row.note ?? rawData.additional_notes
+  );
+  const rawClass = String(
+    row.student_class || rawData.student_class || ''
+  );
   const inferredMedium =
     row.medium_version ||
+    row.medium ||
+    rawData.medium_version ||
     decoded.mediumVersion ||
     (/english/i.test(rawClass)
       ? 'English Version'
@@ -5216,26 +6499,49 @@ export function mapGuardianRowToRecord(row: any): GuardianRequestRecord {
 
   return {
     id: String(row.id || `gr-${Date.now()}`),
-    guardianName: String(row.guardian_name || ''),
-    guardianPhone: String(row.guardian_phone || ''),
+    guardianName: String(
+      row.guardian_name || rawData.guardian_name || ''
+    ),
+    guardianPhone: String(
+      row.guardian_phone || row.phone || rawData.guardian_phone || ''
+    ),
     studentClass: rawClass,
     mediumVersion: String(inferredMedium),
     schoolCollegeName:
-      row.school_college_name || decoded.schoolCollegeName || undefined,
+      row.school_college_name ||
+      rawData.school_college_name ||
+      decoded.schoolCollegeName ||
+      undefined,
     numberOfStudents:
-      Number(row.number_of_students) || decoded.numberOfStudents || 1,
-    subjects: String(row.subjects || ''),
-    upazilaArea: String(row.upazila_area || 'Madaripur Sadar'),
-    fullAddress: String(row.full_address || ''),
-    offeredSalary: Number(row.offered_salary) || 0,
-    daysPerWeek: Number(row.days_per_week) || 4,
+      Number(row.number_of_students ?? rawData.number_of_students) ||
+      decoded.numberOfStudents ||
+      1,
+    subjects: String(row.subjects || rawData.subjects || ''),
+    upazilaArea: String(
+      row.upazila_area || row.upazila || rawData.upazila_area || 'Madaripur Sadar'
+    ),
+    fullAddress: String(
+      row.full_address || row.location || rawData.full_address || ''
+    ),
+    offeredSalary:
+      Number(row.offered_salary ?? row.salary ?? rawData.offered_salary) || 0,
+    daysPerWeek:
+      Number(row.days_per_week ?? rawData.days_per_week) || 4,
     preferredTimeDuration:
-      row.preferred_time_duration || decoded.preferredTimeDuration || undefined,
-    preferredGender: String(row.preferred_gender || 'Any'),
+      row.preferred_time_duration ||
+      rawData.preferred_time_duration ||
+      decoded.preferredTimeDuration ||
+      undefined,
+    preferredGender: String(
+      row.preferred_gender || rawData.preferred_gender || 'Any'
+    ),
     preferredUniversity:
-      row.preferred_university || decoded.preferredUniversity || undefined,
+      row.preferred_university ||
+      rawData.preferred_university ||
+      decoded.preferredUniversity ||
+      undefined,
     additionalNotes: decoded.cleanNotes,
-    status: String(row.status || 'pending'),
+    status: String(row.status || rawData.status || 'pending'),
     createdAt: row.created_at
       ? String(row.created_at)
       : new Date().toISOString(),
@@ -5440,14 +6746,41 @@ export async function submitGuardianRequestToSupabase(
     status: 'pending',
   };
 
+  const liveGrId = `GR-${Date.now()}`;
+  const livePayload = {
+    id: liveGrId,
+    guardian_name: payload.guardian_name,
+    phone: payload.guardian_phone,
+    student_class: payload.student_class,
+    medium: input.mediumVersion?.trim() || 'Bangla Medium',
+    subjects: payload.subjects,
+    salary: payload.offered_salary,
+    days_per_week: String(payload.days_per_week),
+    location: payload.full_address,
+    upazila: payload.upazila_area,
+    preferred_gender: payload.preferred_gender,
+    note: encodedNotes,
+    status: 'pending',
+    raw_data: payload,
+  };
+
   let savedRecord: GuardianRequestRecord | null = null;
 
   if (supabaseClient && typeof supabaseClient.from === 'function') {
     try {
-      const { data, error } = await supabaseClient
+      let { data, error } = await supabaseClient
         .from('guardian_requests')
         .insert([payload])
         .select();
+
+      if (error) {
+        const fallbackRes = await supabaseClient
+          .from('guardian_requests')
+          .insert([livePayload])
+          .select();
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
 
       if (!error && Array.isArray(data) && data[0]) {
         savedRecord = mapGuardianRowToRecord(data[0]);
@@ -5633,6 +6966,8 @@ export type AdminSectionTab =
   | 'verifications'
   | 'applications'
   | 'guardian_requests'
+  | 'payments_and_guardians'
+  | 'homepage_cms'
   | 'notice_board'
   | 'site_settings';
 
@@ -5773,11 +7108,14 @@ export const OFFICIAL_COPYRIGHT_NOTICE =
  * `student_id_scan_url` columns until the Admin opens the Admin Verification Desk
  * or full applicant profile modal.
  */
+export const PUBLIC_TUTOR_SUMMARY_COLUMNS =
+  'id,full_name,upazila,institution,teaching_subjects,expected_fee,profile_photo_url,status,gender,medium,experience';
+
 export const PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS =
-  'id,verification_code,user_email,user_id,full_name,mobile_number,upazila,gender,expected_fee,profile_photo_url,profile_photo_name,smart_nid_number,institution_category,university_college_name,department_degree,student_registration_id,teaching_subjects,nid_file_name,student_id_file_name,admin_audit_note,status,hidden_from_admin,created_at';
+  'id,verification_code,user_email,email,user_id,full_name,mobile_number,phone,upazila,institution,institution_category,university_college_name,department_degree,student_registration_id,teaching_subjects,expected_fee,profile_photo_url,profile_photo_name,smart_nid_number,nid_file_name,student_id_file_name,admin_audit_note,rejection_note,is_rejected,status,gender,medium,experience,hidden_from_admin,created_at';
 
 export const PUBLIC_TUTOR_VERIFICATION_FALLBACK_COLUMNS =
-  'id,verification_code,user_email,user_id,full_name,mobile_number,upazila,gender,expected_fee,profile_photo_url,profile_photo_name,smart_nid_number,institution_category,university_college_name,department_degree,student_registration_id,teaching_subjects,nid_file_name,student_id_file_name,status,created_at';
+  'id,verification_code,user_email,user_id,full_name,mobile_number,upazila,gender,expected_fee,profile_photo_url,profile_photo_name,smart_nid_number,institution_category,university_college_name,department_degree,student_registration_id,teaching_subjects,nid_file_name,student_id_file_name,admin_audit_note,status,hidden_from_admin,created_at';
 
 /**
  * Dedicated column projection for lazy-loading heavy NID and Student ID Base64 scans
@@ -5837,10 +7175,13 @@ export function mergeVerificationDocumentScans(
 export const LIVE_SESSION_CACHE_STORAGE_KEY =
   'madaripur_live_session_cache_v1';
 
+export const LIVE_SESSION_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes (120,000 ms)
+
 export interface LiveSessionCachePayload {
   jobs?: TuitionJob[];
   applications?: CircularApplicationRow[];
   verifications?: VerificationRequest[];
+  tutors?: TutorProfile[];
   updatedAt?: number;
 }
 
@@ -5861,6 +7202,17 @@ function getDefaultSessionStorage(): SessionCacheStorageLike | null {
   return null;
 }
 
+export function isLiveSessionCacheFresh(
+  cache?: LiveSessionCachePayload | null,
+  ttlMs = LIVE_SESSION_CACHE_TTL_MS
+): boolean {
+  if (!cache || typeof cache.updatedAt !== 'number' || cache.updatedAt <= 0) {
+    return false;
+  }
+  const age = Date.now() - cache.updatedAt;
+  return age >= 0 && age <= ttlMs;
+}
+
 export function readLiveSessionCacheFromStorage(
   storage: SessionCacheStorageLike | null = getDefaultSessionStorage()
 ): LiveSessionCachePayload | null {
@@ -5878,6 +7230,7 @@ export function readLiveSessionCacheFromStorage(
       verifications: Array.isArray(parsed.verifications)
         ? parsed.verifications
         : undefined,
+      tutors: Array.isArray(parsed.tutors) ? parsed.tutors : undefined,
       updatedAt:
         typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
     };
@@ -5906,11 +7259,29 @@ export function writeLiveSessionCacheToStorage(
       jobs: payload.jobs ?? existing.jobs,
       applications: payload.applications ?? existing.applications,
       verifications: lightweightVerifications,
-      updatedAt: Date.now(),
+      tutors: payload.tutors ?? existing.tutors,
+      updatedAt:
+        typeof payload.updatedAt === 'number' ? payload.updatedAt : Date.now(),
     };
     storage.setItem(LIVE_SESSION_CACHE_STORAGE_KEY, JSON.stringify(nextPayload));
   } catch {
     // Ignore storage quota errors
   }
 }
+
+export function invalidateLiveSessionCacheInStorage(
+  storage: SessionCacheStorageLike | null = getDefaultSessionStorage()
+): void {
+  if (!storage) return;
+  try {
+    if (typeof storage.removeItem === 'function') {
+      storage.removeItem(LIVE_SESSION_CACHE_STORAGE_KEY);
+    } else {
+      storage.setItem(LIVE_SESSION_CACHE_STORAGE_KEY, '');
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 

@@ -8,9 +8,18 @@
     --font-mono: 'JetBrains Mono', monospace;
   }
 
+  html,
   body {
+    overflow-x: hidden;
+    max-width: 100%;
     font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  #root {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
   }
 
   .font-bangla {
@@ -20,6 +29,15 @@
   .font-mono-num {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Prevent mobile Safari/Chrome auto-zoom on input focus by ensuring 16px font-size on small screens */
+  @media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 }
 
@@ -35,4 +53,18 @@ input[type="range"] {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Strictly hide external hosting badges */
+a[href*="netlify.com"],
+iframe[src*="netlify"],
+[class*="netlify-badge"],
+[id*="netlify-badge"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 

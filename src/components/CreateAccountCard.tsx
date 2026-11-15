@@ -17,10 +17,11 @@ import {
   evaluateSignUpOutcome,
   isAdminEmail,
   markExplicitLoginIntent,
+  markSignUpFlowInProgress,
   validateAccountInput,
   verifyAdminPin,
 } from '../utils/tutorEngine';
-import { supabase } from '../supabaseClient.js';
+import { supabase } from '../supabaseClient';
 
 interface CreateAccountCardProps {
   currentUser: UserAccount | null;
@@ -105,41 +106,50 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
 
     try {
       if (mode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({
-          email: trimmedEmail,
-          password,
-        });
+        markSignUpFlowInProgress(true);
+        try {
+          const { data, error } = await supabase.auth.signUp({
+            email: trimmedEmail,
+            password,
+          });
 
-        const outcome = evaluateSignUpOutcome(
-          Boolean(data?.session),
-          error?.message,
-          trimmedEmail
-        );
+          const outcome = evaluateSignUpOutcome(
+            Boolean(data?.session),
+            error?.message,
+            trimmedEmail
+          );
 
-        if (outcome.errorMessage) {
-          setErrorMsg(outcome.errorMessage);
-          return;
-        }
-
-        // Do NOT auto-login after signUp: if Supabase created a session, sign out immediately
-        if (outcome.shouldSignOutTempSession) {
-          try {
-            await supabase.auth.signOut();
-          } catch {
-            // Ignore signOut error
+          if (outcome.errorMessage) {
+            markSignUpFlowInProgress(false);
+            setErrorMsg(outcome.errorMessage);
+            return;
           }
-        }
 
-        // Pre-fill the email field, clear password/name, show success message, and redirect to Sign In page
-        const successText = outcome.infoMessage || EMAIL_CONFIRMATION_MESSAGE;
-        setFullName('');
-        setPassword('');
-        setEmail(outcome.prefilledEmail || trimmedEmail);
-        setInfoMsg(successText);
-        handleSwitchMode('signin', {
-          preserveInfo: true,
-          prefillEmail: outcome.prefilledEmail || trimmedEmail,
-        });
+          // Do NOT auto-login after signUp: if Supabase created a session, sign out immediately
+          if (outcome.shouldSignOutTempSession) {
+            try {
+              await supabase.auth.signOut();
+            } catch {
+              // Ignore signOut error
+            }
+          }
+
+          // Pre-fill the email field, clear password/name, show success message, and switch directly to Sign In mode
+          const registeredEmail = outcome.prefilledEmail || trimmedEmail;
+          const successText = outcome.infoMessage || EMAIL_CONFIRMATION_MESSAGE;
+          setFullName('');
+          setPassword('');
+          setEmail(registeredEmail);
+          setInfoMsg(successText);
+          handleSwitchMode('signin', {
+            preserveInfo: true,
+            prefillEmail: registeredEmail,
+          });
+        } finally {
+          window.setTimeout(() => {
+            markSignUpFlowInProgress(false);
+          }, 150);
+        }
         return;
       } else {
         markExplicitLoginIntent();

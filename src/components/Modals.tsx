@@ -18,6 +18,7 @@ import {
 import {
   ADMIN_REJECTION_QUICK_REASONS,
   CircularApplicationInput,
+  DUPLICATE_CIRCULAR_APPLICATION_MESSAGE,
   UserAccount,
   extractAdminNoteFromApplication,
   extractMediaFeeFromApplication,
@@ -152,6 +153,8 @@ export const FullProfileModal: React.FC<FullProfileModalProps> = ({
             <img
               src={tutor.profilePhotoUrl}
               alt={`Verified photo of ${tutor.nameEn}`}
+              loading="lazy"
+              decoding="async"
               referrerPolicy="no-referrer"
               className="w-20 h-20 rounded-full object-cover border-2 border-[#047857]/40 shrink-0 shadow-xs"
             />
@@ -870,8 +873,8 @@ export const ApplyJobModal: React.FC<ApplyJobModalProps> = ({
 
   const authenticatedEmail = (currentUser?.email || '').trim().toLowerCase();
   const authenticatedUserId = (
-    (authenticatedEmail ? authenticatedEmail.split('@')[0] : '') ||
     currentUser?.id ||
+    (authenticatedEmail ? authenticatedEmail.split('@')[0] : '') ||
     currentUser?.fullName ||
     ''
   ).trim();
@@ -904,7 +907,11 @@ export const ApplyJobModal: React.FC<ApplyJobModalProps> = ({
     applications,
     job.id,
     currentUser,
-    myTutorProfile
+    myTutorProfile,
+    {
+      userEmail: authenticatedEmail || null,
+      userId: currentUser?.id || authenticatedUserId || null,
+    }
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -949,14 +956,11 @@ export const ApplyJobModal: React.FC<ApplyJobModalProps> = ({
         tutorId: resolvedTutorId,
         tutorPhone: cleanPhone,
         userEmail: authenticatedEmail || null,
+        userId: currentUser?.id || authenticatedUserId || null,
       }
     );
     if (duplicateCheck) {
-      setErrorMsg(
-        lang === 'en'
-          ? 'You have already applied to this tuition circular (limit: 1 application per circular).'
-          : 'আপনি ইতিমধ্যে এই টিউশনি সার্কুলারে আবেদন করেছেন (প্রতি সার্কুলারে ১টি আবেদন)।'
-      );
+      setErrorMsg(DUPLICATE_CIRCULAR_APPLICATION_MESSAGE);
       return;
     }
 
@@ -1066,24 +1070,28 @@ export const ApplyJobModal: React.FC<ApplyJobModalProps> = ({
           </div>
         ) : appliedDone || existingUserApp ? (
           <div className="text-center py-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <h2
               id="apply-job-title"
               className="text-xl font-extrabold text-stone-900 dark:text-white mb-1"
             >
-              {lang === 'en'
-                ? `Application Submitted for ${job.id}!`
-                : `${job.id} টিউশনিতে আবেদন সম্পন্ন!`}
+              {appliedDone
+                ? lang === 'en'
+                  ? `Application Submitted for ${job.id}!`
+                  : `${job.id} টিউশনিতে আবেদন সম্পন্ন!`
+                : 'Already Applied ✓'}
             </h2>
             <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 mb-3">
-              {lang === 'en'
-                ? `Linked to your account (${authenticatedEmail || authenticatedUserId}) and saved to Supabase "circular_applications" (${submittedTutorId || existingUserApp?.tutor_id || 'Pending'}).`
-                : `আপনার অ্যাকাউন্টের সাথে যুক্ত হয়ে জমা হয়েছে।`}
+              {appliedDone
+                ? lang === 'en'
+                  ? `Linked to your account (${authenticatedEmail || authenticatedUserId}) and saved to Supabase "circular_applications" (${submittedTutorId || existingUserApp?.tutor_id || 'Pending'}).`
+                  : `আপনার অ্যাকাউন্টের সাথে যুক্ত হয়ে জমা হয়েছে।`
+                : DUPLICATE_CIRCULAR_APPLICATION_MESSAGE}
             </p>
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 text-xs font-bold mb-5">
-              <span>⏳ Application Under Review</span>
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-[#047857] dark:text-emerald-300 border border-emerald-500/40 text-xs font-extrabold mb-5">
+              <span>Already Applied ✓</span>
             </div>
             <button
               type="button"
@@ -1125,6 +1133,8 @@ export const ApplyJobModal: React.FC<ApplyJobModalProps> = ({
                 <img
                   src={myTutorProfile.profilePhotoDataUrl}
                   alt={myTutorProfile.tutorNameEn}
+                  loading="lazy"
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   className="w-10 h-10 rounded-full object-cover border border-[#047857]"
                 />
@@ -2185,6 +2195,8 @@ export const AdminApplicantsModal: React.FC<AdminApplicantsModalProps> = ({
                         <img
                           src={linkedProfile.profilePhotoDataUrl}
                           alt={applicant.tutor_name}
+                          loading="lazy"
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-[#047857] shrink-0"
                         />
@@ -2817,6 +2829,8 @@ export const AdminApplicantsModal: React.FC<AdminApplicantsModalProps> = ({
                               <img
                                 src={linkedProfile.profilePhotoDataUrl}
                                 alt={`Profile Photo for ${linkedProfile.tutorNameEn}`}
+                                loading="lazy"
+                                decoding="async"
                                 referrerPolicy="no-referrer"
                                 className="w-full h-32 object-cover rounded-lg border border-stone-200 dark:border-stone-700"
                               />

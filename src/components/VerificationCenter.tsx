@@ -30,6 +30,8 @@ import {
   PROTECTED_ADMIN_DELETE_ERROR,
   PaymentSubmissionInput,
   SOCIAL_LINKS_UPDATED_TOAST,
+  HOMEPAGE_STATS_UPDATED_TOAST,
+  HomepageStatsMode,
   SiteSocialSettings,
   UNSUBMITTED_PROFILE_BANNER_BN,
   UNSUBMITTED_PROFILE_BANNER_EN,
@@ -71,6 +73,8 @@ import {
   readSiteSocialSettingsFromStorage,
   sanitizeUnsubmittedGoogleProfile,
   toBanglaNumber,
+  NID_STUDENT_ID_JPG_ONLY_ERROR,
+  validateNidOrStudentIdJpgFile,
   validateProfilePhotoFile,
   validateTutorProfileSubmission,
   writeSiteSocialSettingsToStorage,
@@ -85,6 +89,9 @@ import {
   getTutorAccountRestrictionDetails,
   extractDetailedGuardianRequestFields,
   DetailedGuardianRequestView,
+  MADARIPUR_INSTITUTION_CATEGORIES,
+  resolveAutoFilledInstitutionName,
+  resolveHomepageLiveStats,
 } from '../utils/tutorEngine';
 import {
   TutorUploadFileBundle,
@@ -206,13 +213,11 @@ interface VerificationCenterProps {
   onOpenAdminPostJob?: () => void;
   onOpenAdminApplicants?: (job: TuitionJob) => void;
   siteSocialSettings?: SiteSocialSettings;
-  onSaveSiteSocialSettings?: (input: {
-    facebookUrl?: string;
-    whatsappContact?: string;
-    bkashNumber?: string;
-    nagadNumber?: string;
-    verificationFee?: number;
-  }) => Promise<void> | void;
+  onSaveSiteSocialSettings?: (
+    input: Partial<SiteSocialSettings>
+  ) => Promise<void> | void;
+  liveVerifiedTutorsCount?: number;
+  liveOnlineTutorsCount?: number;
   paymentRequests?: PaymentRequestRecord[];
   onSubmitPaymentRequest?: (
     input: PaymentSubmissionInput
@@ -253,13 +258,7 @@ interface VerificationCenterProps {
   lastDeskMessage: string | null;
 }
 
-const COLLEGES: Exclude<CollegeTag, 'All'>[] = [
-  'Govt. Nazimuddin College',
-  'Madaripur Govt. College',
-  'DU',
-  'BUET',
-  'Medical',
-];
+const COLLEGES: Exclude<CollegeTag, 'All'>[] = MADARIPUR_INSTITUTION_CATEGORIES;
 
 const MEDIUM_OPTIONS: Exclude<MediumCategory, 'All'>[] = [
   'Bangla Medium',
@@ -302,6 +301,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   onOpenAdminApplicants,
   siteSocialSettings,
   onSaveSiteSocialSettings,
+  liveVerifiedTutorsCount,
+  liveOnlineTutorsCount,
   paymentRequests,
   onSubmitPaymentRequest,
   onAdminPaymentDecision,
@@ -348,6 +349,89 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   );
   const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false);
 
+  // Homepage & Live Stats CMS State (stored in public.site_settings id = 1 + sessionStorage)
+  const [cmsStatsMode, setCmsStatsMode] = useState<HomepageStatsMode>(
+    resolvedSocialSettings.stats_mode === 'manual' ? 'manual' : 'auto'
+  );
+  const [cmsManualVerifiedTutors, setCmsManualVerifiedTutors] = useState<string>(
+    resolvedSocialSettings.manual_verified_tutors ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors ||
+      '120+'
+  );
+  const [cmsManualOnlineTutors, setCmsManualOnlineTutors] = useState<string>(
+    resolvedSocialSettings.manual_online_tutors ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors ||
+      '45+'
+  );
+  const [cmsManualActiveCirculars, setCmsManualActiveCirculars] =
+    useState<string>(
+      resolvedSocialSettings.manual_active_circulars ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars ||
+        '30+'
+    );
+  const [cmsManualTotalApplications, setCmsManualTotalApplications] =
+    useState<string>(
+      resolvedSocialSettings.manual_total_applications ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications ||
+        '85'
+    );
+  const [cmsTrustCard3Value, setCmsTrustCard3Value] = useState<string>(
+    resolvedSocialSettings.trust_card_3_value ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value ||
+      '100%'
+  );
+  const [cmsTrustCard3Label, setCmsTrustCard3Label] = useState<string>(
+    resolvedSocialSettings.trust_card_3_label ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label ||
+      '100% Smart NID Verified'
+  );
+  const [cmsTrustCard4Value, setCmsTrustCard4Value] = useState<string>(
+    resolvedSocialSettings.trust_card_4_value ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value ||
+      '< 24h'
+  );
+  const [cmsTrustCard4Label, setCmsTrustCard4Label] = useState<string>(
+    resolvedSocialSettings.trust_card_4_label ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label ||
+      'Fast Guardian Matching'
+  );
+  const [cmsHeroTopBadge1, setCmsHeroTopBadge1] = useState<string>(
+    resolvedSocialSettings.hero_top_badge_1 ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_1 ||
+      '🛡️ Manual NID & University ID Verification Workflow'
+  );
+  const [cmsHeroTopBadge2, setCmsHeroTopBadge2] = useState<string>(
+    resolvedSocialSettings.hero_top_badge_2 ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_2 ||
+      'Verified Guardian Reviews'
+  );
+  const [cmsHeroTitle, setCmsHeroTitle] = useState<string>(
+    resolvedSocialSettings.hero_title ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.hero_title ||
+      'Verified home & online tutors'
+  );
+  const [cmsGuardianCardTitle, setCmsGuardianCardTitle] = useState<string>(
+    resolvedSocialSettings.guardian_card_title ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_title ||
+      'Need a Verified Home/Online Tutor?'
+  );
+  const [cmsGuardianCardBadge, setCmsGuardianCardBadge] = useState<string>(
+    resolvedSocialSettings.guardian_card_badge ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_badge ||
+      '2 Free Trial Classes'
+  );
+  const [cmsTutorCardTitle, setCmsTutorCardTitle] = useState<string>(
+    resolvedSocialSettings.tutor_card_title ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_title ||
+      'Looking for Tuitions?'
+  );
+  const [cmsTutorCardDesc, setCmsTutorCardDesc] = useState<string>(
+    resolvedSocialSettings.tutor_card_desc ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_desc ||
+      'Verify your Smart NID & Student ID once to get the glowing Verified Tutor badge and apply directly to live guardian circulars across Madaripur.'
+  );
+  const [isSavingHomepageCms, setIsSavingHomepageCms] = useState(false);
+
   // PaymentModal State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
   const [paymentModalMethod, setPaymentModalMethod] =
@@ -372,6 +456,84 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
           siteSocialSettings.verificationFee || DEFAULT_VERIFICATION_FEE_BDT
         )
       );
+      setCmsStatsMode(
+        siteSocialSettings.stats_mode === 'manual' ? 'manual' : 'auto'
+      );
+      setCmsManualVerifiedTutors(
+        siteSocialSettings.manual_verified_tutors ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors ||
+          '120+'
+      );
+      setCmsManualOnlineTutors(
+        siteSocialSettings.manual_online_tutors ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors ||
+          '45+'
+      );
+      setCmsManualActiveCirculars(
+        siteSocialSettings.manual_active_circulars ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars ||
+          '30+'
+      );
+      setCmsManualTotalApplications(
+        siteSocialSettings.manual_total_applications ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications ||
+          '85'
+      );
+      setCmsTrustCard3Value(
+        siteSocialSettings.trust_card_3_value ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value ||
+          '100%'
+      );
+      setCmsTrustCard3Label(
+        siteSocialSettings.trust_card_3_label ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label ||
+          '100% Smart NID Verified'
+      );
+      setCmsTrustCard4Value(
+        siteSocialSettings.trust_card_4_value ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value ||
+          '< 24h'
+      );
+      setCmsTrustCard4Label(
+        siteSocialSettings.trust_card_4_label ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label ||
+          'Fast Guardian Matching'
+      );
+      setCmsHeroTopBadge1(
+        siteSocialSettings.hero_top_badge_1 ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_1 ||
+          '🛡️ Manual NID & University ID Verification Workflow'
+      );
+      setCmsHeroTopBadge2(
+        siteSocialSettings.hero_top_badge_2 ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_2 ||
+          'Verified Guardian Reviews'
+      );
+      setCmsHeroTitle(
+        siteSocialSettings.hero_title ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.hero_title ||
+          'Verified home & online tutors'
+      );
+      setCmsGuardianCardTitle(
+        siteSocialSettings.guardian_card_title ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_title ||
+          'Need a Verified Home/Online Tutor?'
+      );
+      setCmsGuardianCardBadge(
+        siteSocialSettings.guardian_card_badge ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_badge ||
+          '2 Free Trial Classes'
+      );
+      setCmsTutorCardTitle(
+        siteSocialSettings.tutor_card_title ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_title ||
+          'Looking for Tuitions?'
+      );
+      setCmsTutorCardDesc(
+        siteSocialSettings.tutor_card_desc ||
+          DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_desc ||
+          'Verify your Smart NID & Student ID once to get the glowing Verified Tutor badge and apply directly to live guardian circulars across Madaripur.'
+      );
     }
   }, [siteSocialSettings]);
 
@@ -390,10 +552,12 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   const [openAdminSections, setOpenAdminSections] = useState<
     Record<Exclude<AdminSectionTab, 'all_accordion'>, boolean>
   >({
+    homepage_cms: true,
     site_settings: true,
     notice_board: true,
     guardian_requests: true,
     payments: true,
+    payments_and_guardians: true,
     verifications: true,
     applications: true,
   });
@@ -407,6 +571,12 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
   const isSectionVisible = (section: Exclude<AdminSectionTab, 'all_accordion'>): boolean => {
     if (activeAdminTab === 'all_accordion') return true;
+    if (
+      activeAdminTab === 'payments_and_guardians' &&
+      (section === 'payments' || section === 'guardian_requests')
+    ) {
+      return true;
+    }
     return activeAdminTab === section;
   };
 
@@ -641,6 +811,94 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       );
     } finally {
       setIsSavingSocialLinks(false);
+    }
+  };
+
+  const buildHomepageCmsPayload = (
+    overrideMode?: HomepageStatsMode
+  ): Partial<SiteSocialSettings> => ({
+    facebookUrl: socialFacebookInput.trim(),
+    whatsappContact: socialWhatsappInput.trim(),
+    bkashNumber: bkashNumberInput.trim() || DEFAULT_BKASH_NUMBER,
+    nagadNumber: nagadNumberInput.trim() || DEFAULT_NAGAD_NUMBER,
+    verificationFee:
+      Number(verificationFeeInput) || DEFAULT_VERIFICATION_FEE_BDT,
+    stats_mode: overrideMode ?? cmsStatsMode,
+    manual_verified_tutors:
+      cmsManualVerifiedTutors.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors,
+    manual_online_tutors:
+      cmsManualOnlineTutors.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors,
+    manual_active_circulars:
+      cmsManualActiveCirculars.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars,
+    manual_total_applications:
+      cmsManualTotalApplications.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications,
+    trust_card_3_value:
+      cmsTrustCard3Value.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value,
+    trust_card_3_label:
+      cmsTrustCard3Label.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label,
+    trust_card_4_value:
+      cmsTrustCard4Value.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value,
+    trust_card_4_label:
+      cmsTrustCard4Label.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label,
+    hero_top_badge_1:
+      cmsHeroTopBadge1.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_1,
+    hero_top_badge_2:
+      cmsHeroTopBadge2.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.hero_top_badge_2,
+    hero_title:
+      cmsHeroTitle.trim() || DEFAULT_SITE_SOCIAL_SETTINGS.hero_title,
+    guardian_card_title:
+      cmsGuardianCardTitle.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_title,
+    guardian_card_badge:
+      cmsGuardianCardBadge.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.guardian_card_badge,
+    tutor_card_title:
+      cmsTutorCardTitle.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_title,
+    tutor_card_desc:
+      cmsTutorCardDesc.trim() ||
+      DEFAULT_SITE_SOCIAL_SETTINGS.tutor_card_desc,
+  });
+
+  const handleToggleCmsStatsMode = async (nextMode: HomepageStatsMode) => {
+    setCmsStatsMode(nextMode);
+    const payload = buildHomepageCmsPayload(nextMode);
+    writeSiteSocialSettingsToStorage(payload);
+    if (onSaveSiteSocialSettings) {
+      await onSaveSiteSocialSettings(payload);
+    }
+    showAdminToast('success', HOMEPAGE_STATS_UPDATED_TOAST);
+  };
+
+  const handleSaveHomepageCms = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingHomepageCms(true);
+    try {
+      const payload = buildHomepageCmsPayload();
+      writeSiteSocialSettingsToStorage(payload);
+      if (onSaveSiteSocialSettings) {
+        await onSaveSiteSocialSettings(payload);
+      }
+      showAdminToast('success', HOMEPAGE_STATS_UPDATED_TOAST);
+    } catch (err) {
+      showAdminToast(
+        'error',
+        err instanceof Error
+          ? err.message
+          : 'Failed to save Homepage & Stats settings.'
+      );
+    } finally {
+      setIsSavingHomepageCms(false);
     }
   };
 
@@ -923,7 +1181,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
     undefined
   );
   const [collegeTag, setCollegeTag] = useState<Exclude<CollegeTag, 'All'>>(
-    'Govt. Nazimuddin College'
+    'Madaripur Govt. College (Govt. Nazimuddin College)'
   );
   const [institutionFull, setInstitutionFull] = useState('');
   const [department, setDepartment] = useState('');
@@ -1059,8 +1317,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       setNidScanFile(null);
       setNidDocumentName('');
       setNidScanDataUrl(undefined);
-      setCollegeTag('Govt. Nazimuddin College');
-      setInstitutionFull('');
+      setCollegeTag('Madaripur Govt. College (Govt. Nazimuddin College)');
+      setInstitutionFull('Madaripur Govt. College (Govt. Nazimuddin College)');
       setDepartment('');
       setStudentRegId('');
       setAcademicSession('');
@@ -1100,13 +1358,15 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
     setNidScanFile(null);
     setNidDocumentName(profile.nidDocumentName || '');
     setNidScanDataUrl(profile.nidScanDataUrl);
-    setCollegeTag(
-      (profile.collegeTag || 'Govt. Nazimuddin College') as Exclude<
-        CollegeTag,
-        'All'
-      >
+    const resolvedEditCategory: Exclude<CollegeTag, 'All'> =
+      profile.collegeTag &&
+      COLLEGES.includes(profile.collegeTag as Exclude<CollegeTag, 'All'>)
+        ? (profile.collegeTag as Exclude<CollegeTag, 'All'>)
+        : 'Madaripur Govt. College (Govt. Nazimuddin College)';
+    setCollegeTag(resolvedEditCategory);
+    setInstitutionFull(
+      profile.institutionFullEn || resolvedEditCategory
     );
-    setInstitutionFull(profile.institutionFullEn || '');
     setDepartment(profile.departmentEn || '');
     setStudentRegId(profile.studentRegId || '');
     setAcademicSession(profile.academicSession || '');
@@ -1143,7 +1403,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
     setProfilePhotoName(file.name);
     try {
       const { file: compressedFile, dataUrl: optimizedDataUrl } =
-        await compressImageFile(file, 600, 0.55);
+        await compressImageFile(file, 400, 0.65);
       setProfilePhotoFile(compressedFile);
       setProfilePhotoDataUrl(optimizedDataUrl);
     } catch (err) {
@@ -1163,6 +1423,31 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const validation = validateNidOrStudentIdJpgFile(file.name, file.type);
+    const isJpgMime =
+      !file.type ||
+      file.type.toLowerCase() === 'image/jpeg' ||
+      file.type.toLowerCase() === 'image/jpg';
+    const isJpgExt = /\.(jpg|jpeg)$/i.test(file.name);
+
+    if (!validation.valid || !isJpgMime || !isJpgExt) {
+      const errMsg = validation.error || NID_STUDENT_ID_JPG_ONLY_ERROR;
+      setFormError(errMsg);
+      showAdminToast('error', errMsg);
+      if (type === 'nid') {
+        setNidScanFile(null);
+        setNidDocumentName('');
+        setNidScanDataUrl(undefined);
+      } else {
+        setUniScanFile(null);
+        setUniDocumentName('');
+        setUniScanDataUrl(undefined);
+      }
+      e.target.value = '';
+      return;
+    }
+
+    setFormError('');
     if (type === 'nid') {
       setNidScanFile(file);
       setNidDocumentName(file.name);
@@ -1173,7 +1458,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
     try {
       const { file: compressedFile, dataUrl: optimizedDataUrl } =
-        await compressImageFile(file, 600, 0.55);
+        await compressImageFile(file, 800, 0.65);
       if (type === 'nid') {
         setNidScanFile(compressedFile);
         setNidScanDataUrl(optimizedDataUrl);
@@ -1502,7 +1787,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       <section
         id="tutor-upload-desk"
         aria-label="Tutor Profile and Verification Status"
-        className="max-w-[1280px] mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6"
+        className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-x-hidden"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
           <div>
@@ -1728,6 +2013,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         <img
                           src={activeTutorProfile.profilePhotoDataUrl}
                           alt={activeTutorProfile.tutorNameEn}
+                          loading="lazy"
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
@@ -2116,15 +2403,21 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
               </div>
 
               {/* 3. Compact Action Bar */}
-              <div className="flex flex-wrap items-center gap-2 my-2.5">
+              <div className="flex flex-wrap gap-2.5 items-center my-2.5">
                 <button
                   type="button"
                   onClick={() => handleStartEditAndResubmit(activeTutorProfile)}
-                  className="py-1.5 px-3 text-xs font-bold rounded-lg bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[42px] py-2 px-3.5 text-xs font-bold rounded-lg bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>
-                    {lang === 'en' ? 'Edit Profile Info' : 'প্রোফাইল সম্পাদনা'}
+                    {!isProfileSubmitted
+                      ? lang === 'en'
+                        ? 'Upload Profile'
+                        : 'প্রোফাইল আপলোড করুন'
+                      : lang === 'en'
+                      ? 'Edit Profile Info'
+                      : 'প্রোফাইল সম্পাদনা'}
                   </span>
                 </button>
 
@@ -2132,7 +2425,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenPaymentModal('bKash')}
-                    className="py-1.5 px-3 text-xs font-bold rounded-lg bg-gradient-to-r from-[#E2136E] to-[#B80D57] hover:opacity-95 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="min-h-[42px] py-2 px-3.5 text-xs font-bold rounded-lg bg-gradient-to-r from-[#E2136E] to-[#B80D57] hover:opacity-95 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
                     <span>
@@ -2147,7 +2440,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   type="button"
                   onClick={handleRefreshProfileStatus}
                   disabled={isRefreshingStatus}
-                  className="py-1.5 px-3 text-xs font-bold rounded-lg bg-white dark:bg-stone-800 border border-slate-200 dark:border-stone-700 hover:border-emerald-600 text-slate-800 dark:text-stone-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  className="min-h-[42px] py-2 px-3.5 text-xs font-bold rounded-lg bg-white dark:bg-stone-800 border border-slate-200 dark:border-stone-700 hover:border-emerald-600 text-slate-800 dark:text-stone-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
                   <RefreshCw
                     className={`w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 ${
@@ -2166,7 +2459,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                       .getElementById('my-applications')
                       ?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="py-1.5 px-3 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-900 dark:text-amber-300 transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[42px] py-2 px-3.5 text-xs font-bold rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-900 dark:text-amber-300 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>
                     {lang === 'en' ? '🚀 View My Applications' : '🚀 আমার আবেদনসমূহ'}
@@ -2221,6 +2514,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         <img
                           src={activeTutorProfile.profilePhotoDataUrl}
                           alt="Tutor Profile Photo Thumbnail"
+                          loading="lazy"
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
                         />
@@ -2272,6 +2567,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         <img
                           src={activeTutorProfile.nidScanDataUrl}
                           alt="NID Scan Thumbnail"
+                          loading="lazy"
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
                         />
@@ -2321,6 +2618,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         <img
                           src={activeTutorProfile.uniScanDataUrl}
                           alt="Student ID Card Thumbnail"
+                          loading="lazy"
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
                         />
@@ -2401,6 +2700,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         <img
                           src={profilePhotoDataUrl}
                           alt="Selected Tutor Profile Photo Preview"
+                          loading="lazy"
+                          decoding="async"
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
@@ -2656,13 +2957,13 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1"
                   >
                     {lang === 'en'
-                      ? 'Upload NID Scan (Image / PDF)'
-                      : 'এনআইডি স্ক্যান কপি আপলোড করুন'}
+                      ? 'Upload NID Scan (JPG Only)'
+                      : 'এনআইডি স্ক্যান কপি আপলোড করুন (JPG Only)'}
                   </label>
                   <input
                     id="ver-nid-file"
                     type="file"
-                    accept="image/jpeg,image/png,image/*,.pdf"
+                    accept=".jpg,.jpeg,image/jpeg"
                     onChange={(e) => handleFileUpload(e, 'nid')}
                     className="w-full text-xs text-stone-600 dark:text-stone-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#047857] file:text-white hover:file:bg-[#065F46]"
                   />
@@ -2704,11 +3005,19 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     <select
                       id="ver-college-tag"
                       value={collegeTag}
-                      onChange={(e) =>
-                        setCollegeTag(
-                          e.target.value as Exclude<CollegeTag, 'All'>
-                        )
-                      }
+                      onChange={(e) => {
+                        const nextCategory = e.target.value as Exclude<
+                          CollegeTag,
+                          'All'
+                        >;
+                        const nextInstFull = resolveAutoFilledInstitutionName(
+                          nextCategory,
+                          institutionFull,
+                          collegeTag
+                        );
+                        setCollegeTag(nextCategory);
+                        setInstitutionFull(nextInstFull);
+                      }}
                       className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                     >
                       {COLLEGES.map((c) => (
@@ -2795,13 +3104,13 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                       className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1"
                     >
                       {lang === 'en'
-                        ? 'Upload Student ID Card Scan'
-                        : 'স্টুডেন্ট আইডি কার্ড স্ক্যান'}
+                        ? 'Upload Student ID Card Scan (JPG Only)'
+                        : 'স্টুডেন্ট আইডি কার্ড স্ক্যান (JPG Only)'}
                     </label>
                     <input
                       id="ver-uni-file"
                       type="file"
-                      accept="image/jpeg,image/png,image/*,.pdf"
+                      accept=".jpg,.jpeg,image/jpeg"
                       onChange={(e) => handleFileUpload(e, 'uni')}
                       className="w-full text-xs text-stone-600 dark:text-stone-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white"
                     />
@@ -3492,14 +3801,50 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
   const setAllAccordionOpen = (isOpen: boolean) => {
     setOpenAdminSections({
+      homepage_cms: isOpen,
       site_settings: isOpen,
       notice_board: isOpen,
       guardian_requests: isOpen,
       payments: isOpen,
+      payments_and_guardians: isOpen,
       verifications: isOpen,
       applications: isOpen,
     });
   };
+
+  const autoCalcVerifiedCount =
+    typeof liveVerifiedTutorsCount === 'number'
+      ? liveVerifiedTutorsCount
+      : adminVisibleRequests.filter((r) => r.status === 'Approved').length;
+  const autoCalcOnlineCount =
+    typeof liveOnlineTutorsCount === 'number'
+      ? liveOnlineTutorsCount
+      : adminVisibleRequests.filter((r) => r.status === 'Approved').length;
+  const autoCalcActiveCircularsCount = adminVisibleJobs.filter(
+    (j) => (j.status || 'Active') === 'Active'
+  ).length;
+  const resolvedAdminCounterDisplay = resolveHomepageLiveStats(
+    {
+      ...DEFAULT_SITE_SOCIAL_SETTINGS,
+      ...(siteSocialSettings || {}),
+      stats_mode: cmsStatsMode,
+    },
+    {
+      verifiedTutorsCount: autoCalcVerifiedCount,
+      onlineTutorsCount: autoCalcOnlineCount,
+      activeCircularsCount: adminVisibleJobs.length,
+      totalApplicationsCount: adminVisibleApplications.length,
+    },
+    'en'
+  );
+  const displayCircularsCount =
+    cmsStatsMode === 'manual'
+      ? resolvedAdminCounterDisplay.activeCircularsDisplay
+      : String(adminVisibleJobs.length);
+  const displayApplicationsCount =
+    cmsStatsMode === 'manual'
+      ? resolvedAdminCounterDisplay.totalApplicationsDisplay
+      : String(adminVisibleApplications.length);
 
   return (
     <section
@@ -3573,7 +3918,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
         {/* Two-Row Header Layout: Row 1 (Section Tabs) + Row 2 (Search, Sort, Filter, Expand/Collapse Controls) */}
         <div className="mt-3 pt-3 border-t border-stone-200/80 dark:border-stone-800 flex flex-col gap-3">
-          {/* Row 1: All Section Tabs — 100% visible with flex-wrap gap-2 w-full */}
+          {/* Row 1: Clean Admin Sub-Tabs — 100% visible with flex-wrap gap-2 w-full */}
           <div
             role="tablist"
             aria-label="Admin Dashboard Sections"
@@ -3585,7 +3930,33 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   id: 'all_accordion' as const,
                   labelEn: 'All Sections',
                   labelBn: 'সকল সেকশন',
-                  badge: 6,
+                  badge: 7,
+                },
+                {
+                  id: 'verifications' as const,
+                  labelEn: '🛡️ Tutor Verifications',
+                  labelBn: '🛡️ টিউটর ভেরিফিকেশন',
+                  badge: adminVisibleRequests.length,
+                  pending: pendingVerificationsCount,
+                },
+                {
+                  id: 'applications' as const,
+                  labelEn: '📋 Tuition Circulars & Applications',
+                  labelBn: '📋 টিউশনি সার্কুলার ও আবেদন',
+                  badge: adminVisibleApplications.length,
+                  pending: pendingApplicationsCount,
+                },
+                {
+                  id: 'payments_and_guardians' as const,
+                  labelEn: '💳 Payments & Guardian Requests',
+                  labelBn: '💳 পেমেন্ট ও অভিভাবক রিকোয়েস্ট',
+                  badge: adminVisiblePayments.length + guardianRequests.length,
+                  pending: pendingPaymentsCount + pendingGuardiansCount,
+                },
+                {
+                  id: 'homepage_cms' as const,
+                  labelEn: '📊 Homepage & Stats CMS',
+                  labelBn: '📊 হোমপেজ ও স্ট্যাটাস সিএমএস',
                 },
                 {
                   id: 'site_settings' as const,
@@ -3597,34 +3968,6 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   labelEn: '📢 Notice Board',
                   labelBn: '📢 নোটিশ বোর্ড',
                   badge: siteNotices.length,
-                },
-                {
-                  id: 'guardian_requests' as const,
-                  labelEn: '📞 Guardian Requests',
-                  labelBn: '📞 অভিভাবক রিকোয়েস্ট',
-                  badge: guardianRequests.length,
-                  pending: pendingGuardiansCount,
-                },
-                {
-                  id: 'payments' as const,
-                  labelEn: '💳 bKash/Nagad Payments',
-                  labelBn: '💳 বিকাশ/নগদ পেমেন্ট',
-                  badge: adminVisiblePayments.length,
-                  pending: pendingPaymentsCount,
-                },
-                {
-                  id: 'verifications' as const,
-                  labelEn: '🛡️ NID & Uni ID Verification',
-                  labelBn: '🛡️ এনআইডি ও আইডি যাচাই',
-                  badge: adminVisibleRequests.length,
-                  pending: pendingVerificationsCount,
-                },
-                {
-                  id: 'applications' as const,
-                  labelEn: '📋 Circular Applications',
-                  labelBn: '📋 সার্কুলার আবেদন',
-                  badge: adminVisibleApplications.length,
-                  pending: pendingApplicationsCount,
                 },
               ]
             ).map((tab) => {
@@ -3639,6 +3982,12 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     setActiveAdminTab(tab.id);
                     if (tab.id === 'all_accordion') {
                       setAllAccordionOpen(true);
+                    } else if (tab.id === 'payments_and_guardians') {
+                      setOpenAdminSections((prev) => ({
+                        ...prev,
+                        payments: true,
+                        guardian_requests: true,
+                      }));
                     } else {
                       setOpenAdminSections((prev) => ({
                         ...prev,
@@ -3646,9 +3995,9 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                       }));
                     }
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer border ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all active:scale-[0.98] whitespace-nowrap shrink-0 cursor-pointer border ${
                     isSelected
-                      ? 'bg-[#047857] text-white border-[#047857] shadow-2xs'
+                      ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white border-[#047857] shadow-2xs'
                       : 'bg-[#FAF8F5] dark:bg-stone-800/80 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:border-[#047857]/50'
                   }`}
                 >
@@ -3818,6 +4167,393 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
         </div>
       )}
 
+      {/* ====================================================================
+         SECTION 0: HOMEPAGE & LIVE STATS CMS (Auto / Manual Toggle & Hero Copy)
+         ==================================================================== */}
+      {isSectionVisible('homepage_cms') && (
+        <form
+          onSubmit={handleSaveHomepageCms}
+          data-testid="admin-homepage-stats-cms"
+          aria-label="Homepage & Live Stats CMS"
+          className="rounded-xl bg-white dark:bg-stone-900 border border-emerald-500/25 dark:border-stone-800 p-3.5 sm:p-4 shadow-sm"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggleAdminSection('homepage_cms')}
+                aria-expanded={isSectionExpanded('homepage_cms')}
+                className="inline-flex items-center gap-1.5 text-left cursor-pointer group"
+              >
+                <h2 className="text-sm sm:text-base font-extrabold tracking-tight text-stone-900 dark:text-white flex items-center gap-1.5">
+                  <span>📊 Homepage & Live Stats CMS (site_settings)</span>
+                </h2>
+                {isSectionExpanded('homepage_cms') ? (
+                  <ChevronUp className="w-4 h-4 text-stone-400 group-hover:text-stone-700 dark:group-hover:text-white" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-stone-400 group-hover:text-stone-700 dark:group-hover:text-white" />
+                )}
+              </button>
+
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${
+                  cmsStatsMode === 'auto'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/80 text-[#047857] dark:text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-400/50'
+                }`}
+              >
+                <span>
+                  {cmsStatsMode === 'auto'
+                    ? '⚡ Automatic Mode (Live Counts)'
+                    : '✏️ Manual Mode (Custom Strings)'}
+                </span>
+              </span>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSavingHomepageCms}
+              className="min-h-[38px] inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] disabled:opacity-60 text-white text-xs font-extrabold transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap shadow-xs"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>
+                {isSavingHomepageCms
+                  ? 'Saving Homepage & Stats...'
+                  : 'Save Homepage & Stats'}
+              </span>
+            </button>
+          </div>
+
+          {isSectionExpanded('homepage_cms') && (
+            <div className="mt-3.5 pt-3.5 border-t border-stone-200/80 dark:border-stone-800 space-y-4">
+              {/* 1-Click Counter Mode Toggle Bar */}
+              <div className="p-3 rounded-xl bg-[#FAF8F5] dark:bg-stone-800/70 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="block text-xs font-extrabold text-stone-900 dark:text-white">
+                    {lang === 'en'
+                      ? '1-Click Trust Strip Counter Mode'
+                      : 'হোমপেজ ট্রাস্ট স্ট্রিপ কাউন্টার মোড'}
+                  </span>
+                  <span className="block text-[11px] text-stone-500 dark:text-stone-400">
+                    {cmsStatsMode === 'auto'
+                      ? `Live memory counts: ${autoCalcVerifiedCount}+ Verified Tutors · ${autoCalcOnlineCount}+ Online Tutors · ${autoCalcActiveCircularsCount} Active Circulars`
+                      : 'Custom Manual Mode active — Homepage displays your custom strings below.'}
+                  </span>
+                </div>
+
+                <div
+                  role="group"
+                  aria-label="Counter Mode Toggle"
+                  className="inline-flex items-center p-1 rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 shrink-0"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={cmsStatsMode === 'auto'}
+                    onClick={() => void handleToggleCmsStatsMode('auto')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                      cmsStatsMode === 'auto'
+                        ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-2xs'
+                        : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                    }`}
+                  >
+                    ⚡ Automatic Mode
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={cmsStatsMode === 'manual'}
+                    onClick={() => void handleToggleCmsStatsMode('manual')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                      cmsStatsMode === 'manual'
+                        ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-2xs'
+                        : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                    }`}
+                  >
+                    ✏️ Manual Mode
+                  </button>
+                </div>
+              </div>
+
+              {/* Manual Counters & Trust Cards Grid */}
+              <div>
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#047857] dark:text-emerald-400 mb-2">
+                  Live Platform Trust Strip Counters & Labels
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div>
+                    <label
+                      htmlFor="cms-manual-verified-tutors"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      1. Verified Tutors (Manual String)
+                    </label>
+                    <input
+                      id="cms-manual-verified-tutors"
+                      type="text"
+                      value={cmsManualVerifiedTutors}
+                      onChange={(e) =>
+                        setCmsManualVerifiedTutors(e.target.value)
+                      }
+                      placeholder="120+"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-manual-online-tutors"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      2. Online Tutors (Manual String)
+                    </label>
+                    <input
+                      id="cms-manual-online-tutors"
+                      type="text"
+                      value={cmsManualOnlineTutors}
+                      onChange={(e) => setCmsManualOnlineTutors(e.target.value)}
+                      placeholder="45+"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-manual-active-circulars"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      3. Circulars Count (Manual)
+                    </label>
+                    <input
+                      id="cms-manual-active-circulars"
+                      type="text"
+                      value={cmsManualActiveCirculars}
+                      onChange={(e) =>
+                        setCmsManualActiveCirculars(e.target.value)
+                      }
+                      placeholder="30+"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-manual-total-applications"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      3b. Total Applications (Manual)
+                    </label>
+                    <input
+                      id="cms-manual-total-applications"
+                      type="text"
+                      value={cmsManualTotalApplications}
+                      onChange={(e) =>
+                        setCmsManualTotalApplications(e.target.value)
+                      }
+                      placeholder="85"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-trust-card-3-value"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      4. Trust Card 3 Value (e.g. 100%)
+                    </label>
+                    <input
+                      id="cms-trust-card-3-value"
+                      type="text"
+                      value={cmsTrustCard3Value}
+                      onChange={(e) => setCmsTrustCard3Value(e.target.value)}
+                      placeholder="100%"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label
+                      htmlFor="cms-trust-card-3-label"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      4b. Trust Card 3 Label
+                    </label>
+                    <input
+                      id="cms-trust-card-3-label"
+                      type="text"
+                      value={cmsTrustCard3Label}
+                      onChange={(e) => setCmsTrustCard3Label(e.target.value)}
+                      placeholder="100% Smart NID Verified"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-trust-card-4-value"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      5. Trust Card 4 Value (e.g. &lt; 24h)
+                    </label>
+                    <input
+                      id="cms-trust-card-4-value"
+                      type="text"
+                      value={cmsTrustCard4Value}
+                      onChange={(e) => setCmsTrustCard4Value(e.target.value)}
+                      placeholder="< 24h"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-trust-card-4-label"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      5b. Trust Card 4 Label
+                    </label>
+                    <input
+                      id="cms-trust-card-4-label"
+                      type="text"
+                      value={cmsTrustCard4Label}
+                      onChange={(e) => setCmsTrustCard4Label(e.target.value)}
+                      placeholder="Fast Guardian Matching"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Homepage Hero & Dual Quick-Action Card Texts Editor */}
+              <div className="pt-3 border-t border-stone-200/70 dark:border-stone-800">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#047857] dark:text-emerald-400 mb-2">
+                  Homepage Hero & Dual Quick-Action Card Texts
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  <div>
+                    <label
+                      htmlFor="cms-hero-top-badge-1"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      Hero Top Badge 1 (hero_top_badge_1)
+                    </label>
+                    <input
+                      id="cms-hero-top-badge-1"
+                      type="text"
+                      value={cmsHeroTopBadge1}
+                      onChange={(e) => setCmsHeroTopBadge1(e.target.value)}
+                      placeholder="🛡️ Manual NID & University ID Verification Workflow"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-hero-top-badge-2"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      Hero Top Badge 2 (hero_top_badge_2)
+                    </label>
+                    <input
+                      id="cms-hero-top-badge-2"
+                      type="text"
+                      value={cmsHeroTopBadge2}
+                      onChange={(e) => setCmsHeroTopBadge2(e.target.value)}
+                      placeholder="Verified Guardian Reviews"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-hero-title"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      Main Hero Heading (hero_title)
+                    </label>
+                    <input
+                      id="cms-hero-title"
+                      type="text"
+                      value={cmsHeroTitle}
+                      onChange={(e) => setCmsHeroTitle(e.target.value)}
+                      placeholder="Verified home & online tutors"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-extrabold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-guardian-card-title"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      Guardian Card Title (guardian_card_title)
+                    </label>
+                    <input
+                      id="cms-guardian-card-title"
+                      type="text"
+                      value={cmsGuardianCardTitle}
+                      onChange={(e) => setCmsGuardianCardTitle(e.target.value)}
+                      placeholder="Need a Verified Home/Online Tutor?"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-guardian-card-badge"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      Guardian Trial Badge (guardian_card_badge)
+                    </label>
+                    <input
+                      id="cms-guardian-card-badge"
+                      type="text"
+                      value={cmsGuardianCardBadge}
+                      onChange={(e) => setCmsGuardianCardBadge(e.target.value)}
+                      placeholder="2 Free Trial Classes"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="cms-tutor-card-title"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      Tutor Card Title (tutor_card_title)
+                    </label>
+                    <input
+                      id="cms-tutor-card-title"
+                      type="text"
+                      value={cmsTutorCardTitle}
+                      onChange={(e) => setCmsTutorCardTitle(e.target.value)}
+                      placeholder="Looking for Tuitions?"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <label
+                      htmlFor="cms-tutor-card-desc"
+                      className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                    >
+                      Tutor Card Description (tutor_card_desc)
+                    </label>
+                    <input
+                      id="cms-tutor-card-desc"
+                      type="text"
+                      value={cmsTutorCardDesc}
+                      onChange={(e) => setCmsTutorCardDesc(e.target.value)}
+                      placeholder="Verify your Smart NID & Student ID once to get the glowing Verified Tutor badge..."
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </form>
+      )}
+
 
       {/* ====================================================================
          SECTION 1: SITE SETTINGS & WHATSAPP (Collapsible Card)
@@ -3890,115 +4626,254 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
           </div>
 
           {isSectionExpanded('site_settings') && (
-            <div className="mt-3 pt-3 border-t border-stone-200/80 dark:border-stone-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-              <div>
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <label
-                    htmlFor="admin-facebook-url-input"
-                    className="text-[11px] font-bold text-stone-700 dark:text-stone-200 truncate"
-                  >
-                    Facebook Page / Profile URL
-                  </label>
-                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                    {isSocialChannelActive(socialFacebookInput)
-                      ? '● Live'
-                      : '○ Off'}
-                  </span>
+            <div className="mt-3 pt-3 border-t border-stone-200/80 dark:border-stone-800 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <label
+                      htmlFor="admin-facebook-url-input"
+                      className="text-[11px] font-bold text-stone-700 dark:text-stone-200 truncate"
+                    >
+                      Facebook Page / Profile URL
+                    </label>
+                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                      {isSocialChannelActive(socialFacebookInput)
+                        ? '● Live'
+                        : '○ Off'}
+                    </span>
+                  </div>
+                  <input
+                    id="admin-facebook-url-input"
+                    type="text"
+                    value={socialFacebookInput}
+                    onChange={(e) => setSocialFacebookInput(e.target.value)}
+                    placeholder="https://www.facebook.com/yourpage"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#1877F2]"
+                  />
+                  {isSocialChannelActive(socialFacebookInput) && (
+                    <div className="text-[10px] font-mono-num text-stone-400 truncate mt-0.5">
+                      {normalizeFacebookUrl(socialFacebookInput)}
+                    </div>
+                  )}
                 </div>
-                <input
-                  id="admin-facebook-url-input"
-                  type="text"
-                  value={socialFacebookInput}
-                  onChange={(e) => setSocialFacebookInput(e.target.value)}
-                  placeholder="https://www.facebook.com/yourpage"
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-[#1877F2]"
-                />
-                {isSocialChannelActive(socialFacebookInput) && (
-                  <div className="text-[10px] font-mono-num text-stone-400 truncate mt-0.5">
-                    {normalizeFacebookUrl(socialFacebookInput)}
+
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <label
+                      htmlFor="admin-whatsapp-contact-input"
+                      className="text-[11px] font-bold text-stone-700 dark:text-stone-200 truncate"
+                    >
+                      WhatsApp Number or Direct Link
+                    </label>
+                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                      {isSocialChannelActive(socialWhatsappInput)
+                        ? '● Live'
+                        : '○ Off'}
+                    </span>
+                  </div>
+                  <input
+                    id="admin-whatsapp-contact-input"
+                    type="text"
+                    value={socialWhatsappInput}
+                    onChange={(e) => setSocialWhatsappInput(e.target.value)}
+                    placeholder="01308937770 or https://wa.me/..."
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white font-mono-num focus:outline-none focus:border-[#25D366]"
+                  />
+                  {isSocialChannelActive(socialWhatsappInput) && (
+                    <div className="text-[10px] font-mono-num text-stone-400 truncate mt-0.5">
+                      {formatWhatsAppDirectLink(socialWhatsappInput)}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="admin-bkash-number-input"
+                    className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1 truncate"
+                  >
+                    Official bKash Number (site_settings)
+                  </label>
+                  <input
+                    id="admin-bkash-number-input"
+                    type="tel"
+                    value={bkashNumberInput}
+                    onChange={(e) => setBkashNumberInput(e.target.value)}
+                    placeholder="01308937770"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#E2136E]"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="admin-nagad-number-input"
+                    className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1 truncate"
+                  >
+                    Official Nagad Number (site_settings)
+                  </label>
+                  <input
+                    id="admin-nagad-number-input"
+                    type="tel"
+                    value={nagadNumberInput}
+                    onChange={(e) => setNagadNumberInput(e.target.value)}
+                    placeholder="01308937770"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#F7941D]"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="admin-verification-fee-input"
+                    className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1 truncate"
+                  >
+                    Verification Fee BDT (site_settings)
+                  </label>
+                  <input
+                    id="admin-verification-fee-input"
+                    type="number"
+                    min={50}
+                    value={verificationFeeInput}
+                    onChange={(e) => setVerificationFeeInput(e.target.value)}
+                    placeholder="500"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                  />
+                </div>
+              </div>
+
+              {/* Site Settings Counter Control Bar (Automatic vs Manual) */}
+              <div className="p-3 rounded-xl bg-[#FAF8F5] dark:bg-stone-800/70 border border-emerald-500/20 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <span className="block text-xs font-extrabold text-stone-900 dark:text-white">
+                      Counter Mode (Circulars, Applications &amp; Dashboard Stats)
+                    </span>
+                    <span className="block text-[11px] text-stone-500 dark:text-stone-400">
+                      {cmsStatsMode === 'auto'
+                        ? `Automatic Live DB Count: ${adminVisibleJobs.length} Circulars · ${adminVisibleApplications.length} Total Applications`
+                        : `Manual Custom Digits: ${displayCircularsCount} Circulars · ${displayApplicationsCount} Total Applications`}
+                    </span>
+                  </div>
+
+                  <div
+                    role="group"
+                    aria-label="Site Settings Counter Mode Toggle"
+                    className="inline-flex flex-wrap items-center gap-1 p-1 rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 shrink-0"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={cmsStatsMode === 'auto'}
+                      onClick={() => void handleToggleCmsStatsMode('auto')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+                        cmsStatsMode === 'auto'
+                          ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-2xs'
+                          : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                      }`}
+                    >
+                      Automatic (Live DB Count)
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={cmsStatsMode === 'manual'}
+                      onClick={() => void handleToggleCmsStatsMode('manual')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+                        cmsStatsMode === 'manual'
+                          ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-2xs'
+                          : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                      }`}
+                    >
+                      Manual (Custom Digits)
+                    </button>
+                  </div>
+                </div>
+
+                {cmsStatsMode === 'manual' && (
+                  <div className="pt-2 border-t border-stone-200/70 dark:border-stone-700/70 grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+                    <div>
+                      <label
+                        htmlFor="site-settings-manual-circulars"
+                        className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                      >
+                        Circulars Count
+                      </label>
+                      <input
+                        id="site-settings-manual-circulars"
+                        type="text"
+                        value={cmsManualActiveCirculars}
+                        onChange={(e) =>
+                          setCmsManualActiveCirculars(e.target.value)
+                        }
+                        placeholder="30+"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="site-settings-manual-applications"
+                        className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                      >
+                        Total Applications Count
+                      </label>
+                      <input
+                        id="site-settings-manual-applications"
+                        type="text"
+                        value={cmsManualTotalApplications}
+                        onChange={(e) =>
+                          setCmsManualTotalApplications(e.target.value)
+                        }
+                        placeholder="85"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="site-settings-manual-verified"
+                        className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                      >
+                        Verified Tutors Count
+                      </label>
+                      <input
+                        id="site-settings-manual-verified"
+                        type="text"
+                        value={cmsManualVerifiedTutors}
+                        onChange={(e) =>
+                          setCmsManualVerifiedTutors(e.target.value)
+                        }
+                        placeholder="120+"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="site-settings-manual-online"
+                        className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                      >
+                        Online Tutors Count
+                      </label>
+                      <input
+                        id="site-settings-manual-online"
+                        type="text"
+                        value={cmsManualOnlineTutors}
+                        onChange={(e) =>
+                          setCmsManualOnlineTutors(e.target.value)
+                        }
+                        placeholder="45+"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSavingHomepageCms}
+                      onClick={() => void handleSaveHomepageCms()}
+                      className="col-span-2 sm:col-span-1 min-h-[34px] inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] disabled:opacity-60 text-white text-xs font-extrabold transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap shadow-xs"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {isSavingHomepageCms
+                          ? 'Saving...'
+                          : 'Save / Upload Counter'}
+                      </span>
+                    </button>
                   </div>
                 )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <label
-                    htmlFor="admin-whatsapp-contact-input"
-                    className="text-[11px] font-bold text-stone-700 dark:text-stone-200 truncate"
-                  >
-                    WhatsApp Number or Direct Link
-                  </label>
-                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                    {isSocialChannelActive(socialWhatsappInput)
-                      ? '● Live'
-                      : '○ Off'}
-                  </span>
-                </div>
-                <input
-                  id="admin-whatsapp-contact-input"
-                  type="text"
-                  value={socialWhatsappInput}
-                  onChange={(e) => setSocialWhatsappInput(e.target.value)}
-                  placeholder="01308937770 or https://wa.me/..."
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-white font-mono-num focus:outline-none focus:border-[#25D366]"
-                />
-                {isSocialChannelActive(socialWhatsappInput) && (
-                  <div className="text-[10px] font-mono-num text-stone-400 truncate mt-0.5">
-                    {formatWhatsAppDirectLink(socialWhatsappInput)}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="admin-bkash-number-input"
-                  className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1 truncate"
-                >
-                  Official bKash Number (site_settings)
-                </label>
-                <input
-                  id="admin-bkash-number-input"
-                  type="tel"
-                  value={bkashNumberInput}
-                  onChange={(e) => setBkashNumberInput(e.target.value)}
-                  placeholder="01308937770"
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#E2136E]"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="admin-nagad-number-input"
-                  className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1 truncate"
-                >
-                  Official Nagad Number (site_settings)
-                </label>
-                <input
-                  id="admin-nagad-number-input"
-                  type="tel"
-                  value={nagadNumberInput}
-                  onChange={(e) => setNagadNumberInput(e.target.value)}
-                  placeholder="01308937770"
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#F7941D]"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="admin-verification-fee-input"
-                  className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1 truncate"
-                >
-                  Verification Fee BDT (site_settings)
-                </label>
-                <input
-                  id="admin-verification-fee-input"
-                  type="number"
-                  min={50}
-                  value={verificationFeeInput}
-                  onChange={(e) => setVerificationFeeInput(e.target.value)}
-                  placeholder="500"
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
-                />
               </div>
             </div>
           )}
@@ -6183,6 +7058,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                                     <img
                                       src={fullTutorProfile.profilePhotoDataUrl}
                                       alt={`Profile Photo for ${app.tutor_name}`}
+                                      loading="lazy"
+                                      decoding="async"
                                       referrerPolicy="no-referrer"
                                       className="w-full h-full object-cover"
                                     />
@@ -6786,6 +7663,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                                   <img
                                     src={req.profilePhotoDataUrl}
                                     alt={`Uploaded Profile Photo for ${req.tutorNameEn}`}
+                                    loading="lazy"
+                                    decoding="async"
                                     referrerPolicy="no-referrer"
                                     className="w-full h-24 object-cover"
                                   />
@@ -7152,11 +8031,20 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   <select
                     id="admin-edit-college-tag"
                     value={adminEditCollegeTag}
-                    onChange={(e) =>
-                      setAdminEditCollegeTag(
-                        e.target.value as Exclude<CollegeTag, 'All'> | ''
-                      )
-                    }
+                    onChange={(e) => {
+                      const nextCategory = e.target.value as
+                        | Exclude<CollegeTag, 'All'>
+                        | '';
+                      if (nextCategory) {
+                        const nextInstFull = resolveAutoFilledInstitutionName(
+                          nextCategory,
+                          adminEditInstitution,
+                          adminEditCollegeTag
+                        );
+                        setAdminEditInstitution(nextInstFull);
+                      }
+                      setAdminEditCollegeTag(nextCategory);
+                    }}
                     className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                   >
                     <option value="">Not Provided Yet</option>
@@ -7389,7 +8277,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
       {/* Admin Circular Applicants Management Section inside 3. Admin Review Desk */}
       <div className="mt-8 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800 p-5 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b border-stone-200/80 dark:border-stone-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-stone-200/80 dark:border-stone-800">
           <div>
             <h2 className="text-lg font-extrabold text-stone-900 dark:text-white">
               {lang === 'en'
@@ -7402,9 +8290,150 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                 : 'যেকোনো সার্কুলারে "View Applicants" ক্লিক করে আবেদনকারীদের দেখুন এবং ১ জন শিক্ষক নিশ্চিত করুন।'}
             </p>
           </div>
-          <span className="text-xs font-mono-num font-bold text-[#047857] dark:text-emerald-400">
-            {adminVisibleJobs.length} Circulars · {adminVisibleApplications.length} Total Applications
+          <span
+            data-testid="circulars-applications-counter-badge"
+            className="text-xs font-mono-num font-bold text-[#047857] dark:text-emerald-400"
+          >
+            {displayCircularsCount} Circulars · {displayApplicationsCount} Total Applications
           </span>
+        </div>
+
+        {/* Counter Mode Control Bar (Automatic vs Manual) directly inside Circulars & Applications */}
+        <div
+          data-testid="circulars-counter-control-bar"
+          className="mb-5 p-3 sm:p-3.5 rounded-xl bg-[#FAF8F5] dark:bg-stone-800/70 border border-emerald-500/20 space-y-3"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div>
+              <span className="block text-xs font-extrabold text-stone-900 dark:text-white">
+                {lang === 'en'
+                  ? 'Counter Display Mode (Circulars, Applications & Dashboard Stats)'
+                  : 'কাউন্টার ডিসপ্লে মোড (সার্কুলার, আবেদন ও ড্যাশবোর্ড)'}
+              </span>
+              <span className="block text-[11px] text-stone-500 dark:text-stone-400">
+                {cmsStatsMode === 'auto'
+                  ? `Live DB Counts active: ${adminVisibleJobs.length} Circulars · ${adminVisibleApplications.length} Total Applications · ${autoCalcVerifiedCount}+ Verified · ${autoCalcOnlineCount}+ Online`
+                  : 'Manual Custom Digits active — saved values apply to Circulars badge & Dashboard stats.'}
+              </span>
+            </div>
+
+            <div
+              role="group"
+              aria-label="Circulars Counter Mode Toggle"
+              className="inline-flex flex-wrap items-center gap-1 p-1 rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 shrink-0"
+            >
+              <button
+                type="button"
+                aria-pressed={cmsStatsMode === 'auto'}
+                onClick={() => void handleToggleCmsStatsMode('auto')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+                  cmsStatsMode === 'auto'
+                    ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-2xs'
+                    : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                }`}
+              >
+                Automatic (Live DB Count)
+              </button>
+              <button
+                type="button"
+                aria-pressed={cmsStatsMode === 'manual'}
+                onClick={() => void handleToggleCmsStatsMode('manual')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer whitespace-nowrap ${
+                  cmsStatsMode === 'manual'
+                    ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-2xs'
+                    : 'text-stone-600 dark:text-stone-300 hover:text-stone-900'
+                }`}
+              >
+                Manual (Custom Digits)
+              </button>
+            </div>
+          </div>
+
+          {cmsStatsMode === 'manual' && (
+            <div className="pt-2.5 border-t border-stone-200/80 dark:border-stone-700/70 grid grid-cols-2 sm:grid-cols-5 gap-2.5 items-end">
+              <div>
+                <label
+                  htmlFor="circulars-ctrl-manual-circulars"
+                  className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                >
+                  Circulars Count
+                </label>
+                <input
+                  id="circulars-ctrl-manual-circulars"
+                  type="text"
+                  value={cmsManualActiveCirculars}
+                  onChange={(e) => setCmsManualActiveCirculars(e.target.value)}
+                  placeholder="30+"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="circulars-ctrl-manual-applications"
+                  className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                >
+                  Total Applications Count
+                </label>
+                <input
+                  id="circulars-ctrl-manual-applications"
+                  type="text"
+                  value={cmsManualTotalApplications}
+                  onChange={(e) =>
+                    setCmsManualTotalApplications(e.target.value)
+                  }
+                  placeholder="85"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="circulars-ctrl-manual-verified"
+                  className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                >
+                  Verified Tutors Count
+                </label>
+                <input
+                  id="circulars-ctrl-manual-verified"
+                  type="text"
+                  value={cmsManualVerifiedTutors}
+                  onChange={(e) => setCmsManualVerifiedTutors(e.target.value)}
+                  placeholder="120+"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="circulars-ctrl-manual-online"
+                  className="block text-[11px] font-bold text-stone-700 dark:text-stone-200 mb-1"
+                >
+                  Online Tutors Count
+                </label>
+                <input
+                  id="circulars-ctrl-manual-online"
+                  type="text"
+                  value={cmsManualOnlineTutors}
+                  onChange={(e) => setCmsManualOnlineTutors(e.target.value)}
+                  placeholder="45+"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-mono-num font-bold text-stone-900 dark:text-white focus:outline-none focus:border-[#047857]"
+                />
+              </div>
+
+              <button
+                type="button"
+                disabled={isSavingHomepageCms}
+                onClick={() => void handleSaveHomepageCms()}
+                className="col-span-2 sm:col-span-1 min-h-[36px] inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] disabled:opacity-60 text-white text-xs font-extrabold transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {isSavingHomepageCms ? 'Saving...' : 'Save / Upload Counter'}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
         {adminVisibleJobs.length === 0 ? (

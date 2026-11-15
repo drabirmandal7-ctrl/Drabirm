@@ -60,7 +60,9 @@ import {
   syncPublicTutorsFromVerifications,
   validateAccountInput,
   validateCircularApplicationInput,
+  NID_STUDENT_ID_JPG_ONLY_ERROR,
   validateNIDNumber,
+  validateNidOrStudentIdJpgFile,
   validatePhoneBD,
   validateProfilePhotoFile,
   validateTutorProfileSubmission,
@@ -80,6 +82,8 @@ import {
   encodeDepartmentWithMeta,
   decodeDepartmentWithMeta,
   markExplicitLoginIntent,
+  markSignUpFlowInProgress,
+  isSignUpFlowInProgress,
   hasFreshExplicitLoginIntent,
   clearExplicitLoginIntent,
   markTutorProfileSyncedForEmail,
@@ -145,11 +149,19 @@ import {
   getCleanApplicantExperienceNote,
   formatApplicationNoteWithMetadata,
   ADMIN_REJECTION_QUICK_REASONS,
+  DUPLICATE_CIRCULAR_APPLICATION_MESSAGE,
   hasTutorAlreadyAppliedToCircular,
   isTutorAccountRestricted,
   getTutorAccountRestrictionDetails,
   getCircularCardApplyButtonState,
   unblockTutorForCircularState,
+  HOMEPAGE_STATS_UPDATED_TOAST,
+  DEFAULT_SITE_SOCIAL_SETTINGS,
+  resolveHomepageLiveStats,
+  MADARIPUR_INSTITUTION_CATEGORIES,
+  SPECIFIC_MADARIPUR_COLLEGES,
+  isSpecificMadaripurCollege,
+  resolveAutoFilledInstitutionName,
 } from './tutorEngine';
 
 import {
@@ -1890,7 +1902,7 @@ test('Zero Auto-Fill on New Account / Google Sign-In: buildInitialGoogleTutorPro
   assert.equal(PROFILE_FIELD_PLACEHOLDER, 'Not Provided Yet');
   assert.equal(
     UNSUBMITTED_PROFILE_BANNER_EN,
-    'Complete Your Profile — Please click Edit Profile Info to submit your details for verification.'
+    'Complete Your Profile — Please click Upload Profile to submit your details for verification.'
   );
   assert.equal(
     formatProfileFieldOrPlaceholder(initialProfile.tutorNameEn),
@@ -3545,7 +3557,11 @@ test('1-Application-Per-Circular Limit, Rejection Notes, Unblock Tutor & Account
     userEmail: 'rafiq@example.com',
   });
 
-  // Duplicate apply check by email, tutor ID, or phone
+  // Duplicate apply check by email (case-insensitive), user_id, tutor ID, or phone
+  assert.equal(
+    DUPLICATE_CIRCULAR_APPLICATION_MESSAGE,
+    'You have already applied to this tuition circular. You can apply once per circular.'
+  );
   assert.ok(
     hasTutorAlreadyAppliedToCircular(
       [pendingApp],
@@ -3553,7 +3569,7 @@ test('1-Application-Per-Circular Limit, Rejection Notes, Unblock Tutor & Account
       {
         id: 'u1',
         fullName: 'Rafiq Hasan',
-        email: 'rafiq@example.com',
+        email: 'RAFIQ@EXAMPLE.COM',
         provider: 'email',
         createdAt: 'Now',
       },
@@ -3564,6 +3580,22 @@ test('1-Application-Per-Circular Limit, Rejection Notes, Unblock Tutor & Account
     hasTutorAlreadyAppliedToCircular([pendingApp], sampleJob.id, null, null, {
       tutorPhone: '01755667788',
     })
+  );
+  // Same user CAN apply to a DIFFERENT circular (1 application per circular)
+  assert.equal(
+    hasTutorAlreadyAppliedToCircular(
+      [pendingApp],
+      'MDP-2499-OTHER',
+      {
+        id: 'u1',
+        fullName: 'Rafiq Hasan',
+        email: 'rafiq@example.com',
+        provider: 'email',
+        createdAt: 'Now',
+      },
+      tutorProfile
+    ),
+    undefined
   );
 
   // Circular Apply button states
@@ -3587,7 +3619,7 @@ test('1-Application-Per-Circular Limit, Rejection Notes, Unblock Tutor & Account
     getCircularCardApplyButtonState(pendingApp, { lang: 'en' }),
     {
       state: 'pending',
-      label: '⏳ Application Under Review',
+      label: 'Already Applied ✓',
       interactive: false,
     }
   );
@@ -3777,52 +3809,71 @@ test('Guardian Tuition Requests: extended fields encoding, extraction, and full-
   );
 });
 
-test('Supabase Egress Optimization: 600px/0.55 image compression, lazy verification document columns, and sessionStorage caching', async () => {
+test('Supabase Egress Optimization: 400px/800px @ 0.65 JPEG image compression, public summary columns excluding document scans, and 2-minute sessionStorage caching', async () => {
   const {
+    PROFILE_PHOTO_MAX_DIMENSION,
+    ID_SCAN_MAX_DIMENSION,
     DEFAULT_IMAGE_MAX_DIMENSION,
     DEFAULT_IMAGE_COMPRESSION_QUALITY,
     calculateCompressedDimensions,
     compressImageFile,
   } = await import('./supabaseProfileUpload');
   const {
+    PUBLIC_TUTOR_SUMMARY_COLUMNS,
     PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS,
     ADMIN_VERIFICATION_DOCUMENT_COLUMNS,
+    LIVE_SESSION_CACHE_TTL_MS,
+    isLiveSessionCacheFresh,
     mergeVerificationDocumentScans,
     readLiveSessionCacheFromStorage,
     writeLiveSessionCacheToStorage,
   } = await import('./tutorEngine');
 
-  assert.equal(DEFAULT_IMAGE_MAX_DIMENSION, 600);
-  assert.equal(DEFAULT_IMAGE_COMPRESSION_QUALITY, 0.55);
+  assert.equal(PROFILE_PHOTO_MAX_DIMENSION, 400);
+  assert.equal(ID_SCAN_MAX_DIMENSION, 800);
+  assert.equal(DEFAULT_IMAGE_MAX_DIMENSION, 800);
+  assert.equal(DEFAULT_IMAGE_COMPRESSION_QUALITY, 0.65);
 
-  // Landscape camera photo (4000x3000 -> 600x450 by default)
-  assert.deepEqual(calculateCompressedDimensions(4000, 3000), {
-    width: 600,
-    height: 450,
+  // Profile photo compression (4000x3000 -> 400x300 at maxDimension=400)
+  assert.deepEqual(calculateCompressedDimensions(4000, 3000, 400), {
+    width: 400,
+    height: 300,
   });
 
-  // Portrait phone scan (1500x3000 -> 300x600 by default)
-  assert.deepEqual(calculateCompressedDimensions(1500, 3000), {
-    width: 300,
+  // Landscape camera scan (4000x3000 -> 800x600 by default 800px)
+  assert.deepEqual(calculateCompressedDimensions(4000, 3000), {
+    width: 800,
     height: 600,
   });
 
-  // Already within 600px (500x400 -> 500x400)
+  // Portrait phone scan (1500x3000 -> 400x800 by default 800px)
+  assert.deepEqual(calculateCompressedDimensions(1500, 3000), {
+    width: 400,
+    height: 800,
+  });
+
+  // Already within 800px (500x400 -> 500x400)
   assert.deepEqual(calculateCompressedDimensions(500, 400), {
     width: 500,
     height: 400,
   });
 
-  // Verify compressImageFile works cleanly with a File object at 600px / 0.55 quality
+  // Verify compressImageFile works cleanly with a File object at 400px / 800px and 0.65 quality
   const sampleBytes = new Uint8Array([255, 216, 255, 224, 0, 16, 74, 70, 73, 70]);
   const sampleFile = new File([sampleBytes], 'nid_camera_scan.jpg', {
     type: 'image/jpeg',
   });
-  const result = await compressImageFile(sampleFile);
+  const result = await compressImageFile(sampleFile, 800, 0.65);
   assert.equal(result.file.name, 'nid_camera_scan.jpg');
   assert.equal(result.dataUrl.startsWith('data:image/jpeg;base64,'), true);
 
-  // Public select columns must NOT include nid_scan_url or student_id_scan_url
+  // Public summary and select columns must include summary fields and MUST NOT include nid_scan_url or student_id_scan_url
+  assert.equal(
+    PUBLIC_TUTOR_SUMMARY_COLUMNS,
+    'id,full_name,upazila,institution,teaching_subjects,expected_fee,profile_photo_url,status,gender,medium,experience'
+  );
+  assert.equal(PUBLIC_TUTOR_SUMMARY_COLUMNS.includes('nid_scan_url'), false);
+  assert.equal(PUBLIC_TUTOR_SUMMARY_COLUMNS.includes('student_id_scan_url'), false);
   assert.equal(
     PUBLIC_TUTOR_VERIFICATION_SELECT_COLUMNS.includes('nid_scan_url'),
     false
@@ -3853,15 +3904,16 @@ test('Supabase Egress Optimization: 600px/0.55 image compression, lazy verificat
     [
       {
         verification_code: 'VER-2026-101',
-        nid_scan_url: 'data:image/webp;base64,LAZY_NID',
-        student_id_scan_url: 'data:image/webp;base64,LAZY_UNI',
+        nid_scan_url: 'data:image/jpeg;base64,LAZY_NID',
+        student_id_scan_url: 'data:image/jpeg;base64,LAZY_UNI',
       },
     ]
   );
-  assert.equal(merged[0].nidScanDataUrl, 'data:image/webp;base64,LAZY_NID');
-  assert.equal(merged[0].uniScanDataUrl, 'data:image/webp;base64,LAZY_UNI');
+  assert.equal(merged[0].nidScanDataUrl, 'data:image/jpeg;base64,LAZY_NID');
+  assert.equal(merged[0].uniScanDataUrl, 'data:image/jpeg;base64,LAZY_UNI');
 
-  // Session cache strips heavy Base64 scans while preserving jobs, applications, and verifications
+  // Session cache strips heavy Base64 scans while preserving jobs, applications, verifications, and tutors with 2-minute TTL
+  assert.equal(LIVE_SESSION_CACHE_TTL_MS, 120000);
   const mockStore = new Map<string, string>();
   const mockStorage = {
     getItem: (k: string) => mockStore.get(k) ?? null,
@@ -3872,19 +3924,446 @@ test('Supabase Egress Optimization: 600px/0.55 image compression, lazy verificat
       mockStore.delete(k);
     },
   };
+  const freshTs = Date.now() - 30_000; // 30 seconds ago (fresh within 2 minutes)
   writeLiveSessionCacheToStorage(
     {
       jobs: TEST_JOBS,
       applications: [],
       verifications: merged,
+      tutors: TEST_TUTORS,
+      updatedAt: freshTs,
     },
     mockStorage
   );
   const cached = readLiveSessionCacheFromStorage(mockStorage);
   assert.ok(cached);
   assert.equal(cached.jobs?.length, TEST_JOBS.length);
+  assert.equal(cached.tutors?.length, TEST_TUTORS.length);
   assert.equal(cached.verifications?.[0]?.id, 'VER-2026-101');
   assert.equal(cached.verifications?.[0]?.nidScanDataUrl, undefined);
   assert.equal(cached.verifications?.[0]?.uniScanDataUrl, undefined);
+  assert.equal(isLiveSessionCacheFresh(cached), true);
+  assert.equal(
+    isLiveSessionCacheFresh({ ...cached, updatedAt: Date.now() - 125_000 }),
+    false
+  );
 });
+
+test('Supabase Client Hardcoded Credentials & Direct Tuition Circulars Sync: verifies primary credentials and schema-safe circular insert/mapping', async () => {
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = await import('../supabaseClient');
+  assert.equal(SUPABASE_URL, 'https://lqlumszqxnzmowfpioxf.supabase.co');
+  assert.equal(
+    SUPABASE_ANON_KEY,
+    'sb_publishable_OWl0EbdYM5n2HUzWElzilg_NpfxQkO0'
+  );
+
+  const {
+    buildLiveSupabaseCircularInsertPayload,
+    insertTuitionCircularToSupabase,
+    mapCircularRowToTuitionJob,
+  } = await import('./tutorEngine');
+
+  const sampleJob: TuitionJob = {
+    id: 'MDP-4050',
+    titleEn: 'Need Verified Class 10 Science Tutor in Madaripur Sadar',
+    titleBn: 'Need Verified Class 10 Science Tutor in Madaripur Sadar',
+    studentClassEn: 'Class 10',
+    studentClassBn: 'Class 10',
+    upazila: 'Madaripur Sadar',
+    landmarkEn: 'College Road, Madaripur Sadar',
+    landmarkBn: 'College Road, Madaripur Sadar',
+    medium: 'Bangla Medium',
+    mode: 'Home',
+    subjectsEn: ['Physics', 'Chemistry', 'Higher Math'],
+    subjectsBn: ['Physics', 'Chemistry', 'Higher Math'],
+    daysPerWeek: 4,
+    salaryBdt: 5500,
+    numStudents: 2,
+    preferredGender: 'Any',
+    preferredInstitutionEn: 'Verified Madaripur Tutor',
+    preferredInstitutionBn: 'যাচাইকৃত মাদারীপুর টিউটর',
+    postedAgoEn: 'Just now',
+    postedAgoBn: 'এইমাত্র',
+    guardianName: 'Rahim Hosen',
+    contactPhone: '01308937770',
+    status: 'Active',
+    applicantsCount: 0,
+    urgent: true,
+    hiddenFromAdmin: false,
+  };
+
+  const livePayload = buildLiveSupabaseCircularInsertPayload(sampleJob);
+  assert.equal(livePayload.id, 'MDP-4050');
+  assert.equal(livePayload.status, 'Active');
+  assert.equal(livePayload.raw_data.status, 'Active');
+  assert.equal(livePayload.raw_data.hidden_from_admin, false);
+  assert.equal(livePayload.guardian_phone, '01308937770');
+
+  const mappedFromLiveRow = mapCircularRowToTuitionJob(livePayload as any);
+  assert.equal(mappedFromLiveRow.id, 'MDP-4050');
+  assert.equal(mappedFromLiveRow.status, 'Active');
+  assert.equal(mappedFromLiveRow.hiddenFromAdmin, false);
+  assert.equal(mappedFromLiveRow.salaryBdt, 5500);
+  assert.equal(mappedFromLiveRow.daysPerWeek, 4);
+  assert.equal(mappedFromLiveRow.numStudents, 2);
+  assert.equal(mappedFromLiveRow.contactPhone, '01308937770');
+  assert.deepEqual(mappedFromLiveRow.subjectsEn, [
+    'Physics',
+    'Chemistry',
+    'Higher Math',
+  ]);
+
+  const insertedPayloads: any[] = [];
+  const mockSupabaseLive = {
+    from: (table: string) => {
+      assert.equal(table, 'tuition_circulars');
+      return {
+        insert: async (rows: any[]) => {
+          insertedPayloads.push(rows[0]);
+          return { data: rows, error: null };
+        },
+      };
+    },
+  };
+
+  const insertRes = await insertTuitionCircularToSupabase(
+    mockSupabaseLive,
+    sampleJob
+  );
+  assert.equal(insertRes.ok, true);
+  assert.equal(insertRes.error, null);
+  assert.equal(insertedPayloads.length, 1);
+  assert.equal(insertedPayloads[0].id, 'MDP-4050');
+  assert.equal(insertedPayloads[0].status, 'Active');
+  assert.equal(insertedPayloads[0].raw_data.hidden_from_admin, false);
+});
+
+// ============================================================================
+// 43. STRICT JPG-ONLY NID & STUDENT ID SCAN VALIDATION + SIGNUP FLOW GUARD
+// ============================================================================
+test('validateNidOrStudentIdJpgFile strictly accepts JPG/JPEG and rejects PNG/PDF, while keeping Passport Photo JPG/PNG', () => {
+  assert.equal(validateNidOrStudentIdJpgFile('smart_nid.jpg', 'image/jpeg').valid, true);
+  assert.equal(validateNidOrStudentIdJpgFile('student_id.jpeg', 'image/jpeg').valid, true);
+  assert.equal(validateNidOrStudentIdJpgFile('SCAN.JPG', 'image/jpg').valid, true);
+
+  const pngRes = validateNidOrStudentIdJpgFile('nid_scan.png', 'image/png');
+  assert.equal(pngRes.valid, false);
+  assert.equal(pngRes.error, NID_STUDENT_ID_JPG_ONLY_ERROR);
+
+  const pdfRes = validateNidOrStudentIdJpgFile('student_id.pdf', 'application/pdf');
+  assert.equal(pdfRes.valid, false);
+  assert.equal(pdfRes.error, NID_STUDENT_ID_JPG_ONLY_ERROR);
+
+  // Passport photo continues to accept both JPG and PNG
+  assert.equal(validateProfilePhotoFile('passport.png', 'image/png').valid, true);
+  assert.equal(validateProfilePhotoFile('passport.jpg', 'image/jpeg').valid, true);
+
+  // Sign-up flow in-progress guard
+  assert.equal(isSignUpFlowInProgress(), false);
+  markSignUpFlowInProgress(true);
+  assert.equal(isSignUpFlowInProgress(), true);
+  markSignUpFlowInProgress(false);
+  assert.equal(isSignUpFlowInProgress(), false);
+});
+
+// ============================================================================
+// 44. HOMEPAGE & LIVE STATS CMS (AUTO vs MANUAL MODE + SINGLE-ROW CACHING)
+// ============================================================================
+test('resolveHomepageLiveStats and saveSiteSocialSettingsToSupabase support Auto and Manual Counter Mode and Hero CMS texts', async () => {
+  // 1. Automatic mode uses live loaded counts
+  const autoStats = resolveHomepageLiveStats(
+    {
+      ...DEFAULT_SITE_SOCIAL_SETTINGS,
+      stats_mode: 'auto',
+    },
+    {
+      verifiedTutorsCount: 18,
+      onlineTutorsCount: 7,
+      activeCircularsCount: 12,
+    },
+    'en'
+  );
+  assert.equal(autoStats.statsMode, 'auto');
+  assert.equal(autoStats.verifiedTutorsDisplay, '18+');
+  assert.equal(autoStats.onlineTutorsDisplay, '7+');
+  assert.equal(autoStats.activeCircularsDisplay, '12');
+  assert.equal(autoStats.trustCard3Value, '100%');
+  assert.equal(autoStats.trustCard3Label, '100% Smart NID Verified');
+  assert.equal(autoStats.trustCard4Value, '< 24h');
+  assert.equal(autoStats.trustCard4Label, 'Fast Guardian Matching');
+  assert.equal(autoStats.heroTitle, 'Verified home & online tutors');
+
+  // 2. Manual mode uses custom Admin strings and custom Hero/Card texts
+  const manualStats = resolveHomepageLiveStats(
+    {
+      ...DEFAULT_SITE_SOCIAL_SETTINGS,
+      stats_mode: 'manual',
+      manual_verified_tutors: '120+',
+      manual_online_tutors: '45+',
+      manual_active_circulars: '30+',
+      trust_card_3_value: '100%',
+      trust_card_3_label: '100% Smart NID Verified',
+      trust_card_4_value: '< 12h',
+      trust_card_4_label: 'Express Guardian Matching',
+      hero_top_badge_1: 'Madaripur No.1 Academic Hub',
+      hero_top_badge_2: '100% NID & ID Verified',
+      hero_title: 'Top Verified Home & Online Tutors in Madaripur',
+      guardian_card_title: 'Hire a Verified Home/Online Tutor',
+      guardian_card_badge: '100% Free Trial Class',
+      tutor_card_title: 'Apply for Verified Tuitions',
+      tutor_card_desc: 'Browse active guardian circulars and apply in 1 tap.',
+    },
+    {
+      verifiedTutorsCount: 18,
+      onlineTutorsCount: 7,
+      activeCircularsCount: 12,
+    },
+    'en'
+  );
+  assert.equal(manualStats.statsMode, 'manual');
+  assert.equal(manualStats.verifiedTutorsDisplay, '120+');
+  assert.equal(manualStats.onlineTutorsDisplay, '45+');
+  assert.equal(manualStats.activeCircularsDisplay, '30+');
+  assert.equal(manualStats.trustCard4Value, '< 12h');
+  assert.equal(manualStats.trustCard4Label, 'Express Guardian Matching');
+  assert.equal(manualStats.heroTopBadge1, 'Madaripur No.1 Academic Hub');
+  assert.equal(
+    manualStats.heroTitle,
+    'Top Verified Home & Online Tutors in Madaripur'
+  );
+  assert.equal(
+    manualStats.guardianCardTitle,
+    'Hire a Verified Home/Online Tutor'
+  );
+  assert.equal(manualStats.guardianCardBadge, '100% Free Trial Class');
+  assert.equal(manualStats.tutorCardTitle, 'Apply for Verified Tuitions');
+
+  // 3. Saving Homepage & Stats CMS fields returns HOMEPAGE_STATS_UPDATED_TOAST and caches in storage
+  const saveRes = await saveSiteSocialSettingsToSupabase(null, {
+    stats_mode: 'manual',
+    manual_verified_tutors: '150+',
+    manual_online_tutors: '60+',
+    manual_active_circulars: '35+',
+    hero_title: 'Verified home & online tutors',
+  });
+  assert.equal(saveRes.message, HOMEPAGE_STATS_UPDATED_TOAST);
+  assert.equal(saveRes.settings.stats_mode, 'manual');
+  assert.equal(saveRes.settings.manual_verified_tutors, '150+');
+  assert.equal(saveRes.settings.manual_online_tutors, '60+');
+  assert.equal(saveRes.settings.manual_active_circulars, '35+');
+});
+
+// ============================================================================
+// 45. COMPLETE RANKED MADARIPUR COLLEGES (23 OPTIONS) & AUTO-FILL CONVENIENCE
+// ============================================================================
+test('MADARIPUR_INSTITUTION_CATEGORIES has all 23 ranked institutions and resolveAutoFilledInstitutionName auto-fills specific Madaripur colleges while preserving custom input', () => {
+  assert.equal(MADARIPUR_INSTITUTION_CATEGORIES.length, 23);
+  assert.equal(SPECIFIC_MADARIPUR_COLLEGES.length, 19);
+
+  // Verify exact priority ranking order
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[0],
+    'Madaripur Govt. College (Govt. Nazimuddin College)'
+  );
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[1],
+    'Govt. Sufia Mohila College, Madaripur'
+  );
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[2],
+    'Govt. Barhamganj College, Shibchar'
+  );
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[3],
+    'Kalkini Syed Abul Hossain College (Govt.)'
+  );
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[4],
+    "Govt. Sheikh Hasina Academy & Women's College, Dasar"
+  );
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[18],
+    'Madaripur Technical School & College (TSC)'
+  );
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[19],
+    'Public University (DU / BUET / JU / RU / JNU)'
+  );
+  assert.equal(MADARIPUR_INSTITUTION_CATEGORIES[20], 'Medical College');
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[21],
+    'National University (NU) Affiliated College'
+  );
+  assert.equal(
+    MADARIPUR_INSTITUTION_CATEGORIES[22],
+    'Private University / Other Institution'
+  );
+
+  // 1. Selecting a specific Madaripur college when Full Name is empty auto-fills it
+  assert.equal(
+    resolveAutoFilledInstitutionName(
+      'Govt. Sufia Mohila College, Madaripur',
+      '',
+      'Madaripur Govt. College (Govt. Nazimuddin College)'
+    ),
+    'Govt. Sufia Mohila College, Madaripur'
+  );
+
+  // 2. Selecting another specific Madaripur college when Full Name holds a default value replaces it
+  assert.equal(
+    resolveAutoFilledInstitutionName(
+      'Govt. Barhamganj College, Shibchar',
+      'Govt. Sufia Mohila College, Madaripur',
+      'Govt. Sufia Mohila College, Madaripur'
+    ),
+    'Govt. Barhamganj College, Shibchar'
+  );
+
+  // 3. If the user customized Full University / College Name, selecting a category preserves custom text
+  assert.equal(
+    resolveAutoFilledInstitutionName(
+      'Kalkini Syed Abul Hossain College (Govt.)',
+      'University of Dhaka - Department of Physics',
+      'Public University (DU / BUET / JU / RU / JNU)'
+    ),
+    'University of Dhaka - Department of Physics'
+  );
+
+  // 4. General university category identification
+  assert.equal(
+    isSpecificMadaripurCollege('Govt. Barhamganj College, Shibchar'),
+    true
+  );
+  assert.equal(
+    isSpecificMadaripurCollege('Public University (DU / BUET / JU / RU / JNU)'),
+    false
+  );
+});
+
+// ============================================================================
+// 46. AUTOMATIC VS MANUAL COUNTER CONTROL FOR CIRCULARS, APPLICATIONS & DASHBOARD
+// ============================================================================
+test('Automatic vs Manual Counter Control: resolveHomepageLiveStats supports totalApplicationsDisplay and saveSiteSocialSettingsToSupabase round-trips counters via Supabase site_settings', async () => {
+  // 1. Automatic (Live DB Count) resolves real circulars & total applications counts
+  const autoCounts = resolveHomepageLiveStats(
+    {
+      ...DEFAULT_SITE_SOCIAL_SETTINGS,
+      stats_mode: 'auto',
+      manual_active_circulars: '30+',
+      manual_total_applications: '140+',
+    },
+    {
+      verifiedTutorsCount: 24,
+      onlineTutorsCount: 11,
+      activeCircularsCount: 8,
+      totalApplicationsCount: 19,
+    },
+    'en'
+  );
+  assert.equal(autoCounts.statsMode, 'auto');
+  assert.equal(autoCounts.activeCircularsDisplay, '8');
+  assert.equal(autoCounts.totalApplicationsDisplay, '19');
+  assert.equal(autoCounts.verifiedTutorsDisplay, '24+');
+  assert.equal(autoCounts.onlineTutorsDisplay, '11+');
+
+  // 2. Manual (Custom Digits) replaces Circulars, Total Applications, Verified & Online Tutors counts
+  const manualCounts = resolveHomepageLiveStats(
+    {
+      ...DEFAULT_SITE_SOCIAL_SETTINGS,
+      stats_mode: 'manual',
+      manual_verified_tutors: '180+',
+      manual_online_tutors: '65+',
+      manual_active_circulars: '42',
+      manual_total_applications: '310',
+    },
+    {
+      verifiedTutorsCount: 24,
+      onlineTutorsCount: 11,
+      activeCircularsCount: 8,
+      totalApplicationsCount: 19,
+    },
+    'en'
+  );
+  assert.equal(manualCounts.statsMode, 'manual');
+  assert.equal(manualCounts.activeCircularsDisplay, '42');
+  assert.equal(manualCounts.totalApplicationsDisplay, '310');
+  assert.equal(manualCounts.verifiedTutorsDisplay, '180+');
+  assert.equal(manualCounts.onlineTutorsDisplay, '65+');
+
+  // 3. Supabase `public.site_settings` (`id = 1`) schema-fallback persistence (when custom CMS columns don't exist yet)
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      store.set(k, v);
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+  };
+
+  let storedSupabaseRow: Record<string, unknown> | null = null;
+  const mockMinimalSchemaSupabase = {
+    from: (table: string) => {
+      assert.equal(table, 'site_settings');
+      return {
+        upsert: async (values: Record<string, unknown>) => {
+          // Simulate a strict minimal Supabase `site_settings` schema having only id, facebook_url, whatsapp_url
+          const allowed = new Set(['id', 'facebook_url', 'whatsapp_url']);
+          const extraKey = Object.keys(values).find((k) => !allowed.has(k));
+          if (extraKey) {
+            return {
+              data: null,
+              error: { message: `column "${extraKey}" does not exist` },
+            };
+          }
+          storedSupabaseRow = { ...values };
+          return { data: [storedSupabaseRow], error: null };
+        },
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: storedSupabaseRow,
+              error: null,
+            }),
+          }),
+        }),
+      };
+    },
+  };
+
+  const saveResult = await saveSiteSocialSettingsToSupabase(
+    mockMinimalSchemaSupabase,
+    {
+      facebookUrl: 'https://www.facebook.com/tutorzone.madaripur',
+      whatsappContact: '01308937770',
+      stats_mode: 'manual',
+      manual_verified_tutors: '180+',
+      manual_online_tutors: '65+',
+      manual_active_circulars: '42',
+      manual_total_applications: '310',
+    },
+    mockStorage
+  );
+  assert.equal(saveResult.success, true);
+  assert.equal(saveResult.syncedToSupabase, true);
+  assert.equal(saveResult.message, HOMEPAGE_STATS_UPDATED_TOAST);
+  assert.ok(storedSupabaseRow);
+
+  // Simulate another device fetching fresh from Supabase (with clean local storage)
+  const remoteHydrated = await fetchSiteSocialSettingsFromSupabase(
+    mockMinimalSchemaSupabase,
+    null
+  );
+  assert.equal(
+    remoteHydrated.facebookUrl,
+    'https://www.facebook.com/tutorzone.madaripur'
+  );
+  assert.equal(remoteHydrated.stats_mode, 'manual');
+  assert.equal(remoteHydrated.manual_active_circulars, '42');
+  assert.equal(remoteHydrated.manual_total_applications, '310');
+  assert.equal(remoteHydrated.manual_verified_tutors, '180+');
+  assert.equal(remoteHydrated.manual_online_tutors, '65+');
+});
+
 
