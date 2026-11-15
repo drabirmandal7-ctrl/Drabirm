@@ -706,45 +706,103 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Automatically remove or hide any injected external hosting badges
+  // Automatically remove any injected external hosting badges on documentElement & body
   useEffect(() => {
-    if (typeof document === 'undefined' || !document.body) return;
+    if (typeof document === 'undefined' || !document.documentElement) return;
+
+    const badgeSelectors =
+      '#net-lify-badge, .netlify-badge, a[href*="netlify.com"], iframe[src*="netlify"], div[style*="z-index: 99999"], div[style*="z-index:99999"], [class*="netlify-badge"], [id*="netlify-badge"]';
+
+    const removeBadgeNode = (el: HTMLElement) => {
+      const rootContainer = document.getElementById('root');
+      if (el === document.documentElement || el === document.body || el === rootContainer) {
+        return;
+      }
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+
+      const parent = el.parentElement;
+      if (
+        parent &&
+        parent !== document.documentElement &&
+        parent !== document.body &&
+        parent !== rootContainer &&
+        parent.children.length === 1 &&
+        typeof window !== 'undefined' &&
+        window.getComputedStyle(parent).position === 'fixed'
+      ) {
+        parent.remove();
+      } else {
+        el.remove();
+      }
+    };
 
     const cleanInjectedBadges = () => {
-      const selectors =
-        'a[href*="netlify.com"], iframe[src*="netlify"], [class*="netlify-badge"], [id*="netlify-badge"]';
-      document.querySelectorAll(selectors).forEach((node) => {
-        const el = node as HTMLElement;
-        el.style.setProperty('display', 'none', 'important');
-        el.style.setProperty('visibility', 'hidden', 'important');
-        el.style.setProperty('opacity', '0', 'important');
-        el.style.setProperty('pointer-events', 'none', 'important');
+      document.querySelectorAll(badgeSelectors).forEach((node) => {
+        removeBadgeNode(node as HTMLElement);
+      });
 
-        const parent = el.parentElement;
+      const rootContainer = document.getElementById('root');
+      const bodyChildren = document.body ? Array.from(document.body.children) : [];
+      for (const child of bodyChildren) {
+        const el = child as HTMLElement;
+        if (!el || el === rootContainer || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') {
+          continue;
+        }
+        const htmlText = (el.outerHTML || '').toLowerCase();
+        const plainText = (el.textContent || '').toLowerCase();
         if (
-          parent &&
-          parent !== document.body &&
-          parent.id !== 'root' &&
-          parent.children.length === 1 &&
-          typeof window !== 'undefined' &&
-          window.getComputedStyle(parent).position === 'fixed'
+          htmlText.includes('netlify.com') ||
+          plainText.includes('netlify.com') ||
+          plainText.includes('hosted by netlify') ||
+          plainText.includes('deployed on netlify') ||
+          plainText.includes('powered by netlify')
         ) {
-          parent.remove();
-        } else {
           el.remove();
         }
-      });
+      }
     };
 
     cleanInjectedBadges();
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((mutations) => {
+      const rootContainer = document.getElementById('root');
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach((added) => {
+          if (added.nodeType !== 1) return;
+          const el = added as HTMLElement;
+          if (el === rootContainer || (rootContainer && rootContainer.contains(el))) {
+            return;
+          }
+          const htmlText = (el.outerHTML || '').toLowerCase();
+          const plainText = (el.textContent || '').toLowerCase();
+          if (
+            el.matches?.(badgeSelectors) ||
+            htmlText.includes('netlify.com') ||
+            plainText.includes('netlify.com') ||
+            plainText.includes('hosted by netlify') ||
+            plainText.includes('deployed on netlify') ||
+            plainText.includes('powered by netlify')
+          ) {
+            el.remove();
+          }
+        });
+      }
       cleanInjectedBadges();
     });
-    observer.observe(document.body, {
+
+    observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
     });
+    if (document.body) {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
 
     return () => observer.disconnect();
   }, []);

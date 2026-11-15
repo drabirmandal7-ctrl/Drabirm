@@ -55,16 +55,22 @@ input[type="range"] {
 }
 
 /* Strictly hide external hosting badges */
+#net-lify-badge,
+.netlify-badge,
 a[href*="netlify.com"],
 iframe[src*="netlify"],
+div[style*="z-index: 99999"],
+div[style*="z-index:99999"],
 [class*="netlify-badge"],
 [id*="netlify-badge"] {
   display: none !important;
-  visibility: hidden !important;
   opacity: 0 !important;
+  visibility: hidden !important;
   pointer-events: none !important;
   width: 0 !important;
   height: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
 }
 
 

@@ -28,16 +28,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
+      #net-lify-badge,
+      .netlify-badge,
       a[href*="netlify.com"],
       iframe[src*="netlify"],
+      div[style*="z-index: 99999"],
+      div[style*="z-index:99999"],
       [class*="netlify-badge"],
       [id*="netlify-badge"] {
         display: none !important;
-        visibility: hidden !important;
         opacity: 0 !important;
+        visibility: hidden !important;
         pointer-events: none !important;
         width: 0 !important;
         height: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
       }
     </style>
   </head>
