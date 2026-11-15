@@ -43,16 +43,16 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
   onSubmitRequest,
 }) => {
   const [headline, setHeadline] = useState('');
-  const [upazilaArea, setUpazilaArea] = useState<string>('Madaripur Sadar');
-  const [studentClass, setStudentClass] = useState('Class 9-10');
-  const [numberOfStudents, setNumberOfStudents] = useState<string>('1');
+  const [upazilaArea, setUpazilaArea] = useState<string>('');
+  const [studentClass, setStudentClass] = useState('');
+  const [numberOfStudents, setNumberOfStudents] = useState<string>('');
   const [fullAddress, setFullAddress] = useState('');
-  const [mediumVersion, setMediumVersion] = useState('Bangla Medium');
-  const [tutoringMode, setTutoringMode] = useState('Home');
-  const [preferredGender, setPreferredGender] = useState<string>('Any');
+  const [mediumVersion, setMediumVersion] = useState<string>('');
+  const [tutoringMode, setTutoringMode] = useState<string>('');
+  const [preferredGender, setPreferredGender] = useState<string>('');
   const [subjects, setSubjects] = useState('');
-  const [daysPerWeek, setDaysPerWeek] = useState<string>('4');
-  const [offeredSalary, setOfferedSalary] = useState<string>('5000');
+  const [daysPerWeek, setDaysPerWeek] = useState<string>('');
+  const [offeredSalary, setOfferedSalary] = useState<string>('');
   const [guardianName, setGuardianName] = useState('');
   const [guardianPhone, setGuardianPhone] = useState('');
 
@@ -87,15 +87,18 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
     setFormError(null);
 
     if (
-      !guardianName.trim() ||
+      !upazilaArea.trim() ||
+      !fullAddress.trim() ||
       !studentClass.trim() ||
       !subjects.trim() ||
-      !fullAddress.trim()
+      !daysPerWeek.trim() ||
+      !offeredSalary.trim() ||
+      !guardianName.trim()
     ) {
       setFormError(
         lang === 'en'
-          ? 'Please fill in Student Class, Location Landmark, Subjects, and Guardian Name.'
-          : 'অনুগ্রহ করে শ্রেণি, বাসার ঠিকানা, বিষয় এবং অভিভাবকের নাম পূরণ করুন।'
+          ? 'Please complete all required fields (Upazila, Landmark, Class, Subjects, Days, Salary, and Guardian Name).'
+          : 'অনুগ্রহ করে প্রয়োজনীয় সকল তথ্য (উপজেলা, ঠিকানা, শ্রেণি, বিষয়, দিন, বেতন এবং অভিভাবকের নাম) পূরণ করুন।'
       );
       return;
     }
@@ -110,7 +113,13 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
     }
 
     const cleanHeadline = headline.trim();
-    const resolvedTimeModeNote = `Mode: ${tutoringMode}`;
+    const resolvedMedium = mediumVersion.trim() || 'Bangla Medium';
+    const resolvedMode = tutoringMode.trim() || 'Home';
+    const resolvedGender = preferredGender.trim() || 'Any';
+    const resolvedNumStudents = Number(numberOfStudents) || 1;
+    const resolvedDays = Number(daysPerWeek) || 4;
+    const resolvedSalary = Number(offeredSalary) || 3000;
+    const resolvedTimeModeNote = `Mode: ${resolvedMode}`;
 
     setIsSubmitting(true);
     try {
@@ -118,15 +127,15 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
         guardianName: guardianName.trim(),
         guardianPhone: guardianPhone.trim(),
         studentClass: studentClass.trim(),
-        mediumVersion: mediumVersion.trim(),
-        numberOfStudents: Number(numberOfStudents) || 1,
+        mediumVersion: resolvedMedium,
+        numberOfStudents: resolvedNumStudents,
         subjects: subjects.trim(),
-        upazilaArea,
+        upazilaArea: upazilaArea.trim(),
         fullAddress: fullAddress.trim(),
-        offeredSalary: Number(offeredSalary) || 5000,
-        daysPerWeek: Number(daysPerWeek) || 4,
+        offeredSalary: resolvedSalary,
+        daysPerWeek: resolvedDays,
         preferredTimeDuration: resolvedTimeModeNote,
-        preferredGender,
+        preferredGender: resolvedGender,
         additionalNotes: cleanHeadline || undefined,
       });
 
@@ -138,15 +147,15 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
           guardianName: guardianName.trim(),
           guardianPhone: guardianPhone.trim(),
           studentClass: studentClass.trim(),
-          mediumVersion: mediumVersion.trim(),
-          numberOfStudents: Number(numberOfStudents) || 1,
+          mediumVersion: resolvedMedium,
+          numberOfStudents: resolvedNumStudents,
           subjects: subjects.trim(),
-          upazilaArea,
+          upazilaArea: upazilaArea.trim(),
           fullAddress: fullAddress.trim(),
-          offeredSalary: Number(offeredSalary) || 5000,
-          daysPerWeek: Number(daysPerWeek) || 4,
+          offeredSalary: resolvedSalary,
+          daysPerWeek: resolvedDays,
           preferredTimeDuration: resolvedTimeModeNote,
-          preferredGender,
+          preferredGender: resolvedGender,
           additionalNotes: cleanHeadline || undefined,
           status: 'pending',
         });
@@ -161,8 +170,16 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
   const handleResetAndClose = () => {
     setSubmittedRecord(null);
     setHeadline('');
+    setUpazilaArea('');
+    setStudentClass('');
+    setNumberOfStudents('');
     setFullAddress('');
+    setMediumVersion('');
+    setTutoringMode('');
+    setPreferredGender('');
     setSubjects('');
+    setDaysPerWeek('');
+    setOfferedSalary('');
     setGuardianName('');
     setGuardianPhone('');
     setPhoneError(null);
@@ -278,7 +295,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
               </div>
             </div>
           ) : (
-            /* Streamlined Guardian Request Form (Matches Admin Post Circular Structure) */
+            /* Streamlined Guardian Request Form (Matches Admin Post Circular Structure, Zero Pre-filled Defaults) */
             <form onSubmit={handleSubmit} className="space-y-3">
               {/* 1. Tuition Requirement Headline / Title (Optional) */}
               <div className="min-w-0">
@@ -316,10 +333,16 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                   </label>
                   <select
                     id="gr-upazila"
+                    required
                     value={upazilaArea}
                     onChange={(e) => setUpazilaArea(e.target.value)}
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   >
+                    <option value="">
+                      {lang === 'en'
+                        ? 'Select Upazila / Location'
+                        : 'উপজেলা নির্বাচন করুন'}
+                    </option>
                     {MADARIPUR_UPAZILAS.map((u) => (
                       <option key={u} value={u}>
                         {lang === 'en' ? UPAZILA_LABELS[u].en : UPAZILA_LABELS[u].bn}
@@ -370,7 +393,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                     value={studentClass}
                     onChange={(e) => setStudentClass(e.target.value)}
                     placeholder={
-                      lang === 'en' ? 'e.g. Class 9-10' : 'যেমনঃ ৯ম-১০ম শ্রেণি'
+                      lang === 'en' ? 'e.g. Class 8' : 'যেমনঃ ৮ম শ্রেণি'
                     }
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   />
@@ -389,6 +412,11 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                     onChange={(e) => setNumberOfStudents(e.target.value)}
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   >
+                    <option value="">
+                      {lang === 'en'
+                        ? 'Select No. of Students'
+                        : 'শিক্ষার্থীর সংখ্যা নির্বাচন করুন'}
+                    </option>
                     <option value="1">1 Student</option>
                     <option value="2">2 Students</option>
                     <option value="3">3 Students</option>
@@ -412,6 +440,9 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                     onChange={(e) => setMediumVersion(e.target.value)}
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   >
+                    <option value="">
+                      {lang === 'en' ? 'Select Medium' : 'মিডিয়াম নির্বাচন'}
+                    </option>
                     <option value="Bangla Medium">Bangla Medium</option>
                     <option value="English Version">English Version</option>
                     <option value="Admission Test">Admission Test</option>
@@ -433,6 +464,9 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                     onChange={(e) => setTutoringMode(e.target.value)}
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   >
+                    <option value="">
+                      {lang === 'en' ? 'Select Mode' : 'ধরন নির্বাচন'}
+                    </option>
                     <option value="Home">Home</option>
                     <option value="Online">Online</option>
                     <option value="Group">Group</option>
@@ -452,6 +486,9 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                     onChange={(e) => setPreferredGender(e.target.value)}
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   >
+                    <option value="">
+                      {lang === 'en' ? 'Select Gender' : 'লিঙ্গ নির্বাচন'}
+                    </option>
                     <option value="Any">Any</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -490,10 +527,14 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                   </label>
                   <select
                     id="gr-days"
+                    required
                     value={daysPerWeek}
                     onChange={(e) => setDaysPerWeek(e.target.value)}
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white focus:outline-none focus:border-emerald-600 transition-colors"
                   >
+                    <option value="">
+                      {lang === 'en' ? 'Select Days / Week' : 'দিন নির্বাচন'}
+                    </option>
                     <option value="2">2 Days / Week</option>
                     <option value="3">3 Days / Week</option>
                     <option value="4">4 Days / Week</option>
@@ -519,7 +560,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                     step={500}
                     value={offeredSalary}
                     onChange={(e) => setOfferedSalary(e.target.value)}
-                    placeholder="5000"
+                    placeholder="e.g. 5000"
                     className="w-full min-w-0 px-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num focus:outline-none focus:border-emerald-600 transition-colors"
                   />
                 </div>
@@ -567,7 +608,7 @@ export const GuardianRequestModal: React.FC<GuardianRequestModalProps> = ({
                       required
                       value={guardianPhone}
                       onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="01308937770"
+                      placeholder="e.g. 01308937770"
                       className={`w-full min-w-0 pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl bg-stone-50 dark:bg-stone-800 border text-stone-900 dark:text-white font-mono-num focus:outline-none transition-colors ${
                         phoneError
                           ? 'border-red-500 focus:border-red-600'

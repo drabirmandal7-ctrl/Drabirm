@@ -904,7 +904,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
   // Official Notice Board Manager State (Supabase site_notices)
   const [noticeTitle, setNoticeTitle] = useState('');
-  const [noticeCategory, setNoticeCategory] = useState<string>('Official Update');
+  const [noticeCategory, setNoticeCategory] = useState<string>('');
   const [noticeContent, setNoticeContent] = useState('');
   const [noticeImageUrl, setNoticeImageUrl] = useState('');
   const [noticeIsActive, setNoticeIsActive] = useState<boolean>(true);
@@ -972,7 +972,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       );
       setEditingNoticeId(null);
       setNoticeTitle('');
-      setNoticeCategory('Official Update');
+      setNoticeCategory('');
       setNoticeContent('');
       setNoticeImageUrl('');
       setNoticeIsActive(true);
@@ -1167,12 +1167,12 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   const [photoError, setPhotoError] = useState('');
   const [tutorName, setTutorName] = useState('');
   const [emailInput, setEmailInput] = useState('');
-  const [gender, setGender] = useState<'Male' | 'Female'>('Male');
+  const [gender, setGender] = useState<'Male' | 'Female' | ''>('');
   const [upazila, setUpazila] =
-    useState<Exclude<Upazila, 'All'>>('Madaripur Sadar');
+    useState<Exclude<Upazila, 'All'> | ''>('');
   const [phone, setPhone] = useState('');
   const [medium, setMedium] =
-    useState<Exclude<MediumCategory, 'All'>>('Bangla Medium');
+    useState<Exclude<MediumCategory, 'All'> | ''>('');
   const [experience, setExperience] = useState('');
   const [nidNumber, setNidNumber] = useState('');
   const [nidScanFile, setNidScanFile] = useState<File | null>(null);
@@ -1180,8 +1180,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   const [nidScanDataUrl, setNidScanDataUrl] = useState<string | undefined>(
     undefined
   );
-  const [collegeTag, setCollegeTag] = useState<Exclude<CollegeTag, 'All'>>(
-    'Madaripur Govt. College (Govt. Nazimuddin College)'
+  const [collegeTag, setCollegeTag] = useState<Exclude<CollegeTag, 'All'> | ''>(
+    ''
   );
   const [institutionFull, setInstitutionFull] = useState('');
   const [department, setDepartment] = useState('');
@@ -1208,13 +1208,16 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
     setPhotoError('');
     setTutorName('');
     setEmailInput('');
+    setGender('');
+    setUpazila('');
     setPhone('');
-    setMedium('Bangla Medium');
+    setMedium('');
     setExperience('');
     setNidNumber('');
     setNidScanFile(null);
     setNidDocumentName('');
     setNidScanDataUrl(undefined);
+    setCollegeTag('');
     setInstitutionFull('');
     setDepartment('');
     setStudentRegId('');
@@ -1258,12 +1261,15 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       setTutorName('');
       setEmailInput('');
       setPhone('');
-      setMedium('Bangla Medium');
+      setMedium('');
+      setUpazila('');
+      setGender('');
       setExperience('');
       setNidNumber('');
       setNidScanFile(null);
       setNidDocumentName('');
       setNidScanDataUrl(undefined);
+      setCollegeTag('');
       setInstitutionFull('');
       setDepartment('');
       setStudentRegId('');
@@ -1308,17 +1314,17 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       setTutorName('');
       setEmailInput('');
       setPhone('');
-      setUpazila('Madaripur Sadar');
-      setGender('Male');
-      setMedium('Bangla Medium');
+      setUpazila('');
+      setGender('');
+      setMedium('');
       setExperience('');
       setMonthlyFee('');
       setNidNumber('');
       setNidScanFile(null);
       setNidDocumentName('');
       setNidScanDataUrl(undefined);
-      setCollegeTag('Madaripur Govt. College (Govt. Nazimuddin College)');
-      setInstitutionFull('Madaripur Govt. College (Govt. Nazimuddin College)');
+      setCollegeTag('');
+      setInstitutionFull('');
       setDepartment('');
       setStudentRegId('');
       setAcademicSession('');
@@ -1517,10 +1523,21 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       ''
     ).trim();
 
+    const resolvedUpazila = (upazila || 'Madaripur Sadar') as Exclude<
+      Upazila,
+      'All'
+    >;
+    const resolvedGender = (gender || 'Male') as 'Male' | 'Female';
+    const resolvedCollegeTag = (collegeTag ||
+      'Madaripur Govt. College (Govt. Nazimuddin College)') as Exclude<
+      CollegeTag,
+      'All'
+    >;
+
     const cleanName = tutorName.trim();
     const cleanPhone = phone.trim();
     const cleanNid = nidNumber.replace(/[\s-]/g, '');
-    const cleanInst = institutionFull.trim() || collegeTag;
+    const cleanInst = institutionFull.trim() || resolvedCollegeTag;
     const cleanDept = department.trim() || 'Honours / General';
     const cleanRegId = studentRegId.trim().toUpperCase() || 'Pending Reg ID';
     const cleanMedium = medium || 'Bangla Medium';
@@ -1534,8 +1551,8 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       tutorId: `tutor-ver-${receiptId}`,
       tutorNameEn: cleanName,
       tutorNameBn: cleanName,
-      gender,
-      upazila,
+      gender: resolvedGender,
+      upazila: resolvedUpazila,
       phone: cleanPhone,
       profilePhotoName: profilePhotoDataUrl
         ? profilePhotoName.trim() ||
@@ -1548,14 +1565,14 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
           `${cleanName.replace(/\s+/g, '_')}_Smart_NID.jpg`
         : '',
       nidScanDataUrl,
-      collegeTag,
+      collegeTag: resolvedCollegeTag,
       institutionFullEn: cleanInst,
       departmentEn: cleanDept,
       studentRegId: cleanRegId,
       academicSession: academicSession.trim() || '2022–2023',
       uniDocumentName: uniScanDataUrl
         ? uniDocumentName.trim() ||
-          `${collegeTag.replace(/\s+/g, '_')}_Student_ID.jpg`
+          `${resolvedCollegeTag.replace(/\s+/g, '_')}_Student_ID.jpg`
         : '',
       uniScanDataUrl,
       subjectsEn:
@@ -2832,12 +2849,16 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   </label>
                   <select
                     id="ver-upazila"
+                    required
                     value={upazila}
                     onChange={(e) =>
-                      setUpazila(e.target.value as Exclude<Upazila, 'All'>)
+                      setUpazila(e.target.value as Exclude<Upazila, 'All'> | '')
                     }
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                   >
+                    <option value="">
+                      {lang === 'en' ? 'Select Upazila' : 'উপজেলা নির্বাচন করুন'}
+                    </option>
                     {MADARIPUR_UPAZILAS.map((u) => (
                       <option key={u} value={u}>
                         {lang === 'en'
@@ -2857,12 +2878,16 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   </label>
                   <select
                     id="ver-gender"
+                    required
                     value={gender}
                     onChange={(e) =>
-                      setGender(e.target.value as 'Male' | 'Female')
+                      setGender(e.target.value as 'Male' | 'Female' | '')
                     }
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                   >
+                    <option value="">
+                      {lang === 'en' ? 'Select Gender' : 'লিঙ্গ নির্বাচন করুন'}
+                    </option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                   </select>
@@ -2879,10 +2904,15 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     id="ver-medium"
                     value={medium}
                     onChange={(e) =>
-                      setMedium(e.target.value as Exclude<MediumCategory, 'All'>)
+                      setMedium(
+                        e.target.value as Exclude<MediumCategory, 'All'> | ''
+                      )
                     }
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                   >
+                    <option value="">
+                      {lang === 'en' ? 'Select Medium' : 'মাধ্যম নির্বাচন করুন'}
+                    </option>
                     {MEDIUM_OPTIONS.map((m) => (
                       <option key={m} value={m}>
                         {m}
@@ -2920,12 +2950,12 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   <input
                     id="ver-fee"
                     type="number"
-                    min={2000}
-                    max={10000}
+                    min={1000}
+                    max={50000}
                     step={500}
                     value={monthlyFee}
                     onChange={(e) => setMonthlyFee(e.target.value)}
-                    placeholder="3500"
+                    placeholder="e.g. 3500"
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-[#FAF8F5] dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
                   />
                 </div>
@@ -2945,6 +2975,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                   <input
                     id="ver-nid-number"
                     type="text"
+                    placeholder="e.g. 1999541548899"
                     value={nidNumber}
                     onChange={(e) => setNidNumber(e.target.value)}
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
@@ -3004,22 +3035,33 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     </label>
                     <select
                       id="ver-college-tag"
+                      required
                       value={collegeTag}
                       onChange={(e) => {
-                        const nextCategory = e.target.value as Exclude<
+                        const rawVal = e.target.value;
+                        if (!rawVal) {
+                          setCollegeTag('');
+                          return;
+                        }
+                        const nextCategory = rawVal as Exclude<
                           CollegeTag,
                           'All'
                         >;
                         const nextInstFull = resolveAutoFilledInstitutionName(
                           nextCategory,
                           institutionFull,
-                          collegeTag
+                          collegeTag || ''
                         );
                         setCollegeTag(nextCategory);
                         setInstitutionFull(nextInstFull);
                       }}
                       className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                     >
+                      <option value="">
+                        {lang === 'en'
+                          ? 'Select Institution Category'
+                          : 'প্রতিষ্ঠানের ক্যাটাগরি নির্বাচন করুন'}
+                      </option>
                       {COLLEGES.map((c) => (
                         <option key={c} value={c}>
                           {c}
@@ -3040,6 +3082,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     <input
                       id="ver-inst-full"
                       type="text"
+                      placeholder="e.g. Madaripur Govt. College"
                       value={institutionFull}
                       onChange={(e) => setInstitutionFull(e.target.value)}
                       className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -3056,6 +3099,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     <input
                       id="ver-dept"
                       type="text"
+                      placeholder="e.g. Honours in Mathematics"
                       value={department}
                       onChange={(e) => setDepartment(e.target.value)}
                       className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -3076,6 +3120,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     <input
                       id="ver-reg-id"
                       type="text"
+                      placeholder="e.g. REG-2026-101"
                       value={studentRegId}
                       onChange={(e) => setStudentRegId(e.target.value)}
                       className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
@@ -3092,6 +3137,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     <input
                       id="ver-subjects"
                       type="text"
+                      placeholder="e.g. Physics, Math, Chemistry"
                       value={subjectsInput}
                       onChange={(e) => setSubjectsInput(e.target.value)}
                       className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -4989,16 +5035,20 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                         onChange={(e) => setNoticeCategory(e.target.value)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-750 text-xs text-stone-900 dark:text-white focus:outline-none focus:border-emerald-500"
                       >
+                        <option value="">
+                          {lang === 'en' ? 'Select Category' : 'ক্যাটাগরি নির্বাচন'}
+                        </option>
                         {NOTICE_DEFAULT_CATEGORIES.map((cat) => (
                           <option key={cat} value={cat}>
                             {cat}
                           </option>
                         ))}
-                        {!NOTICE_DEFAULT_CATEGORIES.includes(noticeCategory) && (
-                          <option value={noticeCategory}>
-                            {noticeCategory}
-                          </option>
-                        )}
+                        {noticeCategory &&
+                          !NOTICE_DEFAULT_CATEGORIES.includes(noticeCategory) && (
+                            <option value={noticeCategory}>
+                              {noticeCategory}
+                            </option>
+                          )}
                       </select>
                     </div>
                   </div>

@@ -407,6 +407,7 @@ export const FullProfileModal: React.FC<FullProfileModalProps> = ({
               <input
                 id="rev-guardian-area"
                 type="text"
+                placeholder={lang === 'en' ? 'e.g. Madaripur Sadar' : 'যেমনঃ মাদারীপুর সদর'}
                 value={guardianArea}
                 onChange={(e) => setGuardianArea(e.target.value)}
                 className="w-full px-3 py-2 text-xs rounded-lg bg-[#FAF8F5] dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -423,6 +424,7 @@ export const FullProfileModal: React.FC<FullProfileModalProps> = ({
               <input
                 id="rev-subject"
                 type="text"
+                placeholder={lang === 'en' ? 'e.g. Class 9 Physics' : 'যেমনঃ ৯ম শ্রেণি পদার্থবিজ্ঞান'}
                 value={hiredSubject}
                 onChange={(e) => setHiredSubject(e.target.value)}
                 className="w-full px-3 py-2 text-xs rounded-lg bg-[#FAF8F5] dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -442,6 +444,11 @@ export const FullProfileModal: React.FC<FullProfileModalProps> = ({
             <textarea
               id="rev-written-comment"
               rows={2}
+              placeholder={
+                lang === 'en'
+                  ? 'e.g. Very punctual and explains concepts clearly.'
+                  : 'যেমনঃ সময়নিষ্ঠ এবং খুব সুন্দরভাবে বোঝান।'
+              }
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               className="w-full px-3 py-2 text-xs rounded-lg bg-[#FAF8F5] dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -767,6 +774,7 @@ export const BookTrialModal: React.FC<BookTrialModalProps> = ({
                   <input
                     id="trial-student-class"
                     type="text"
+                    placeholder={lang === 'en' ? 'e.g. Class 8' : 'যেমনঃ ৮ম শ্রেণি'}
                     value={studentClass}
                     onChange={(e) => setStudentClass(e.target.value)}
                     className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -786,6 +794,7 @@ export const BookTrialModal: React.FC<BookTrialModalProps> = ({
                 <input
                   id="trial-landmark"
                   type="text"
+                  placeholder={lang === 'en' ? 'e.g. Lake Par, Ward 4' : 'যেমনঃ লেক পাড়, ওয়ার্ড ৪'}
                   value={landmark}
                   onChange={(e) => setLandmark(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -804,6 +813,7 @@ export const BookTrialModal: React.FC<BookTrialModalProps> = ({
                 <input
                   id="trial-slot"
                   type="text"
+                  placeholder={lang === 'en' ? 'e.g. Saturday at 5:00 PM' : 'যেমনঃ শনিবার বিকাল ৫টা'}
                   value={preferredStart}
                   onChange={(e) => setPreferredStart(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -1282,18 +1292,16 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [studentClass, setStudentClass] = useState('');
-  const [numStudents, setNumStudents] = useState('1');
-  const [upazila, setUpazila] =
-    useState<Exclude<Upazila, 'All'>>('Madaripur Sadar');
+  const [numStudents, setNumStudents] = useState('');
+  const [upazila, setUpazila] = useState<Exclude<Upazila, 'All'> | ''>('');
   const [landmark, setLandmark] = useState('');
-  const [medium, setMedium] =
-    useState<Exclude<MediumCategory, 'All'>>('Bangla Medium');
-  const [mode, setMode] = useState<Exclude<TutoringMode, 'All'>>('Home');
+  const [medium, setMedium] = useState<Exclude<MediumCategory, 'All'> | ''>('');
+  const [mode, setMode] = useState<Exclude<TutoringMode, 'All'> | ''>('');
   const [subjects, setSubjects] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState('');
   const [salaryBdt, setSalaryBdt] = useState('');
   const [preferredGender, setPreferredGender] =
-    useState<TuitionJob['preferredGender']>('Any');
+    useState<TuitionJob['preferredGender'] | ''>('');
   const [guardianName, setGuardianName] = useState('');
   const [guardianPhone, setGuardianPhone] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -1303,11 +1311,11 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !landmark.trim() || !guardianName.trim()) {
+    if (!title.trim() || !upazila || !landmark.trim() || !guardianName.trim()) {
       setErrorMsg(
         lang === 'en'
-          ? 'Please fill in the circular title, landmark, and guardian name.'
-          : 'অনুগ্রহ করে সার্কুলার শিরোনাম, ল্যান্ডমার্ক ও অভিভাবকের নাম পূরণ করুন।'
+          ? 'Please fill in the circular headline, upazila, landmark, and guardian name.'
+          : 'অনুগ্রহ করে সার্কুলার শিরোনাম, উপজেলা, ল্যান্ডমার্ক ও অভিভাবকের নাম পূরণ করুন।'
       );
       return;
     }
@@ -1328,6 +1336,13 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
       ? subjectList
       : ['General Science & Math'];
     const resolvedClass = studentClass.trim() || 'SSC / HSC';
+    const resolvedMedium = (medium || 'Bangla Medium') as Exclude<
+      MediumCategory,
+      'All'
+    >;
+    const resolvedMode = (mode || 'Home') as Exclude<TutoringMode, 'All'>;
+    const resolvedGender = (preferredGender ||
+      'Any') as TuitionJob['preferredGender'];
     const createdTimestamp = new Date().toISOString();
 
     const newJob: TuitionJob = {
@@ -1336,17 +1351,17 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
       titleBn: title.trim(),
       studentClassEn: resolvedClass,
       studentClassBn: resolvedClass,
-      upazila,
+      upazila: upazila as Exclude<Upazila, 'All'>,
       landmarkEn: landmark.trim(),
       landmarkBn: landmark.trim(),
-      medium,
-      mode,
+      medium: resolvedMedium,
+      mode: resolvedMode,
       subjectsEn: resolvedSubjects,
       subjectsBn: subjectList.length ? subjectList : ['গণিত ও বিজ্ঞান'],
       daysPerWeek: Number(daysPerWeek) || 3,
       salaryBdt: Number(salaryBdt) || 3000,
       numStudents: Number(numStudents) || 1,
-      preferredGender,
+      preferredGender: resolvedGender,
       preferredInstitutionEn: 'Verified Madaripur Tutor',
       preferredInstitutionBn: 'যাচাইকৃত মাদারীপুর টিউটর',
       postedAgoEn: 'Just now',
@@ -1355,8 +1370,8 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
       contactPhone: guardianPhone.trim(),
       requirements: title.trim(),
       classSubject: `${resolvedClass} · ${resolvedSubjects.join(', ')}`,
-      tutoringFormat: `${mode} · ${medium}`,
-      tutorPreference: preferredGender,
+      tutoringFormat: `${resolvedMode} · ${resolvedMedium}`,
+      tutorPreference: resolvedGender,
       status: 'Active',
       createdAt: createdTimestamp,
       applicantsCount: 0,
@@ -1368,8 +1383,12 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
       await onAddJob(newJob);
       setTitle('');
       setStudentClass('');
-      setNumStudents('1');
+      setNumStudents('');
+      setUpazila('');
       setLandmark('');
+      setMedium('');
+      setMode('');
+      setPreferredGender('');
       setSubjects('');
       setDaysPerWeek('');
       setSalaryBdt('');
@@ -1427,6 +1446,11 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
               <input
                 id="post-title"
                 type="text"
+                placeholder={
+                  lang === 'en'
+                    ? 'e.g. Science Tutor Needed for Class 9-10'
+                    : 'যেমনঃ ৯ম-১০ম শ্রেণির বিজ্ঞান টিউটর প্রয়োজন'
+                }
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -1443,12 +1467,16 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                 </label>
                 <select
                   id="post-upazila"
+                  required
                   value={upazila}
                   onChange={(e) =>
-                    setUpazila(e.target.value as Exclude<Upazila, 'All'>)
+                    setUpazila(e.target.value as Exclude<Upazila, 'All'> | '')
                   }
                   className="w-full px-3 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                 >
+                  <option value="">
+                    {lang === 'en' ? 'Select Upazila' : 'উপজেলা নির্বাচন'}
+                  </option>
                   {MADARIPUR_UPAZILAS.map((u) => (
                     <option key={u} value={u}>
                       {lang === 'en' ? UPAZILA_LABELS[u].en : UPAZILA_LABELS[u].bn}
@@ -1468,7 +1496,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                   id="post-class"
                   type="text"
                   placeholder={
-                    lang === 'en' ? 'e.g. Class 9-10' : 'যেমনঃ ৯ম-১০ম শ্রেণি'
+                    lang === 'en' ? 'e.g. Class 8' : 'যেমনঃ ৮ম শ্রেণি'
                   }
                   value={studentClass}
                   onChange={(e) => setStudentClass(e.target.value)}
@@ -1485,10 +1513,12 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                 </label>
                 <input
                   id="post-num-students"
-                  type="text"
+                  type="number"
+                  min={1}
+                  max={10}
                   value={numStudents}
                   onChange={(e) => setNumStudents(e.target.value)}
-                  placeholder={lang === 'en' ? 'e.g. 1 or 2' : 'যেমনঃ ১ বা ২'}
+                  placeholder={lang === 'en' ? 'e.g. 1' : 'যেমনঃ ১'}
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
                 />
               </div>
@@ -1506,6 +1536,11 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
               <input
                 id="post-landmark"
                 type="text"
+                placeholder={
+                  lang === 'en'
+                    ? 'e.g. Lake Par, Ward 4, Near DC Office'
+                    : 'যেমনঃ লেক পাড়, ওয়ার্ড ৪'
+                }
                 value={landmark}
                 onChange={(e) => setLandmark(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -1524,10 +1559,15 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                   id="post-medium"
                   value={medium}
                   onChange={(e) =>
-                    setMedium(e.target.value as Exclude<MediumCategory, 'All'>)
+                    setMedium(
+                      e.target.value as Exclude<MediumCategory, 'All'> | ''
+                    )
                   }
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                 >
+                  <option value="">
+                    {lang === 'en' ? 'Select Medium' : 'মিডিয়াম নির্বাচন'}
+                  </option>
                   <option value="Bangla Medium">Bangla Medium</option>
                   <option value="English Version">English Version</option>
                   <option value="Admission Test">Admission Test</option>
@@ -1547,10 +1587,15 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                   id="post-mode"
                   value={mode}
                   onChange={(e) =>
-                    setMode(e.target.value as Exclude<TutoringMode, 'All'>)
+                    setMode(
+                      e.target.value as Exclude<TutoringMode, 'All'> | ''
+                    )
                   }
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                 >
+                  <option value="">
+                    {lang === 'en' ? 'Select Mode' : 'ধরন নির্বাচন'}
+                  </option>
                   <option value="Home">Home</option>
                   <option value="Online">Online</option>
                   <option value="Group">Group</option>
@@ -1569,11 +1614,14 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                   value={preferredGender}
                   onChange={(e) =>
                     setPreferredGender(
-                      e.target.value as TuitionJob['preferredGender']
+                      e.target.value as TuitionJob['preferredGender'] | ''
                     )
                   }
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
                 >
+                  <option value="">
+                    {lang === 'en' ? 'Select Gender' : 'লিঙ্গ নির্বাচন'}
+                  </option>
                   <option value="Any">Any</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
@@ -1592,6 +1640,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                 <input
                   id="post-subjects"
                   type="text"
+                  placeholder={lang === 'en' ? 'e.g. Math, Physics' : 'যেমনঃ গণিত'}
                   value={subjects}
                   onChange={(e) => setSubjects(e.target.value)}
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white"
@@ -1610,6 +1659,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                   type="number"
                   min={1}
                   max={7}
+                  placeholder="e.g. 4"
                   value={daysPerWeek}
                   onChange={(e) => setDaysPerWeek(e.target.value)}
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
@@ -1626,9 +1676,10 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                 <input
                   id="post-salary"
                   type="number"
-                  min={1500}
-                  max={15000}
+                  min={1000}
+                  max={50000}
                   step={500}
+                  placeholder="e.g. 3000"
                   value={salaryBdt}
                   onChange={(e) => setSalaryBdt(e.target.value)}
                   className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"
@@ -1666,7 +1717,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                 <input
                   id="post-guardian-phone"
                   type="tel"
-                  placeholder="01308937770"
+                  placeholder="e.g. 01308937770"
                   value={guardianPhone}
                   onChange={(e) => setGuardianPhone(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white font-mono-num"

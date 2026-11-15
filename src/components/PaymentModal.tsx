@@ -107,12 +107,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           : 'Profile Verification Fee');
       setPurpose(initPurp);
       setAmount(String(defaultFee));
-      setTutorName(
-        myTutorProfile?.tutorNameEn ||
-          currentUser?.fullName ||
-          (currentUser?.email ? currentUser.email.split('@')[0] : '') ||
-          ''
-      );
+      setTutorName(myTutorProfile?.tutorNameEn || '');
       setSenderNumber(myTutorProfile?.phone || '');
       setTransactionId('');
       setErrorMsg('');
