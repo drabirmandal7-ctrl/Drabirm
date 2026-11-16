@@ -37,17 +37,10 @@ import {
   SiteSocialSettings,
   formatBDT,
   resolveHomepageLiveStats,
-  toBanglaNumber,
 } from '../utils/tutorEngine';
 
 interface BentoHeroProps {
   lang: Language;
-  onToggleLang: (next: Language) => void;
-  darkMode: boolean;
-  onToggleDark: () => void;
-  shortlistCount: number;
-  shortlistedOnly: boolean;
-  onToggleShortlistedOnly: () => void;
   filters: FilterState;
   onUpdateFilters: (partial: Partial<FilterState>) => void;
   onResetFilters: () => void;
@@ -77,12 +70,6 @@ const MEDIUM_LABELS_BN: Record<MediumCategory, string> = {
 
 export const BentoHero: React.FC<BentoHeroProps> = ({
   lang,
-  onToggleLang,
-  darkMode,
-  onToggleDark,
-  shortlistCount,
-  shortlistedOnly,
-  onToggleShortlistedOnly,
   filters,
   onUpdateFilters,
   onResetFilters,
@@ -133,62 +120,15 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
     <section
       data-testid="original-dashboard-hero"
       aria-label="Tutor Zone Dashboard Hero"
-      className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5 overflow-x-hidden"
+      className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 pt-2 sm:pt-3 space-y-3 sm:space-y-4 overflow-x-hidden"
     >
-      {/* Top Location Kicker + Utility Controls Row */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 w-full">
+      {/* Top Location Kicker */}
+      <div className="flex items-center justify-between gap-2 w-full">
         <div className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-stone-700 dark:text-stone-300 min-w-0">
           <span aria-hidden="true" className="shrink-0">
             📍
           </span>
           <span className="truncate">{UI_COPY[lang].districtKicker}</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <button
-            type="button"
-            onClick={() => onToggleLang(lang === 'en' ? 'bn' : 'en')}
-            className="min-h-[38px] sm:min-h-[40px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 text-stone-700 dark:text-stone-200 hover:border-[#047857] shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer"
-          >
-            <span aria-hidden="true">🌐</span>
-            <span>বাংলা / English</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleShortlistedOnly}
-            aria-pressed={shortlistedOnly}
-            className={`min-h-[38px] sm:min-h-[40px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer ${
-              shortlistedOnly
-                ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-400 text-amber-900 dark:text-amber-300'
-                : 'bg-white dark:bg-stone-900 border-emerald-500/20 dark:border-stone-800 text-stone-700 dark:text-stone-200 hover:border-[#047857]'
-            }`}
-          >
-            <span aria-hidden="true">{shortlistedOnly ? '❤️' : '🤍'}</span>
-            <span>
-              {lang === 'en'
-                ? `Shortlisted (${shortlistCount})`
-                : `পছন্দের তালিকা (${toBanglaNumber(shortlistCount)})`}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleDark}
-            aria-pressed={darkMode}
-            className="min-h-[38px] sm:min-h-[40px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 text-stone-700 dark:text-stone-200 hover:border-[#047857] shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer"
-          >
-            <span aria-hidden="true">{darkMode ? '☀️' : '🌙'}</span>
-            <span>
-              {darkMode
-                ? lang === 'en'
-                  ? 'Light Mode'
-                  : 'লাইট মোড'
-                : lang === 'en'
-                ? 'Dark Mode'
-                : 'ডার্ক মোড'}
-            </span>
-          </button>
         </div>
       </div>
 
@@ -241,22 +181,22 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
 
           {/* Search Bar & 1-Click Area & Hub Filter */}
           <div className="p-3 sm:p-4 rounded-2xl bg-[#FAF8F5] dark:bg-stone-800/70 border border-emerald-500/20 dark:border-stone-700/80 space-y-3 w-full max-w-full">
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full">
-              <div className="relative flex-1 min-w-[180px]">
-                <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="flex items-center flex-nowrap gap-2 w-full">
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   aria-label="Search Tutor, Subject, or College"
                   placeholder={
                     lang === 'en'
-                      ? 'Search Tutor, Subject, or College...'
-                      : 'শিক্ষক, বিষয় বা কলেজের নাম দিয়ে খুঁজুন...'
+                      ? 'Search Tutor, Subject, College...'
+                      : 'শিক্ষক, বিষয় বা কলেজ খুঁজুন...'
                   }
                   value={filters.searchQuery}
                   onChange={(e) =>
                     onUpdateFilters({ searchQuery: e.target.value })
                   }
-                  className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-base sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-[#047857]"
+                  className="w-full min-h-[44px] pl-9 pr-3 py-2.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 placeholder:text-xs sm:placeholder:text-sm focus:outline-none focus:border-[#047857]"
                 />
               </div>
 
@@ -265,7 +205,7 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
                 <button
                   type="button"
                   onClick={onResetFilters}
-                  className="min-h-[44px] inline-flex items-center gap-1 text-xs font-bold text-[#047857] dark:text-emerald-400 hover:underline px-2.5 py-2 whitespace-nowrap shrink-0 active:scale-[0.98] transition-all cursor-pointer"
+                  className="hidden sm:inline-flex min-h-[44px] items-center gap-1 text-xs font-bold text-[#047857] dark:text-emerald-400 hover:underline px-2.5 py-2 whitespace-nowrap shrink-0 active:scale-[0.98] transition-all cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>{lang === 'en' ? 'Reset' : 'রিসেট'}</span>
@@ -276,7 +216,7 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
                 type="button"
                 onClick={() => setIsFilterOpen((prev) => !prev)}
                 aria-expanded={isFilterOpen}
-                className="min-h-[44px] px-3.5 sm:px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] text-white flex items-center gap-1.5 shrink-0 active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+                className="min-h-[44px] px-3 sm:px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] text-white flex items-center gap-1.5 shrink-0 whitespace-nowrap active:scale-[0.98] transition-all shadow-xs cursor-pointer"
               >
                 <span>⚙️</span>
                 <span>{lang === 'en' ? 'Filter' : 'ফিল্টার'}</span>
@@ -297,6 +237,17 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-stone-500 dark:text-stone-400">
                   {UI_COPY[lang].upazilaFilterLabel}
                 </span>
+                {(activeFiltersCount > 0 ||
+                  Boolean(filters.searchQuery.trim())) && (
+                  <button
+                    type="button"
+                    onClick={onResetFilters}
+                    className="sm:hidden inline-flex items-center gap-1 text-[11px] font-bold text-[#047857] dark:text-emerald-400 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>{lang === 'en' ? 'Reset' : 'রিসেট'}</span>
+                  </button>
+                )}
               </div>
 
               <div className="relative w-full max-w-full overflow-hidden">

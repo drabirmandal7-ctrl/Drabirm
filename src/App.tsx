@@ -135,6 +135,7 @@ import {
   hideTuitionCircularInSupabase,
   deleteTuitionCircularFromSupabase,
   DUPLICATE_CIRCULAR_APPLICATION_MESSAGE,
+  toBanglaNumber,
 } from './utils/tutorEngine';
 import { executeAdminDeleteProfileEverywhere } from './utils/supabaseAdminDelete';
 import { BrandLogo } from './components/BrandLogo';
@@ -2953,42 +2954,110 @@ export default function App() {
         </div>
       </header>
 
-      <main id="top" className="w-full max-w-full overflow-x-hidden pb-24 sm:pb-12">
-        {/* Sticky Frosted-Glass Single-Row Mobile Navigation Pill Bar (No Multi-Row Wrapping) */}
-        <div className="md:hidden sticky top-[76px] z-30 w-full max-w-full backdrop-blur-md bg-white/95 dark:bg-stone-950/95 border-b border-emerald-500/15 dark:border-stone-800">
+      <main id="top" className="w-full max-w-full overflow-x-hidden pb-20 sm:pb-12">
+        {/* Clean 2x2 Mobile Navigation Grid (No Blank Gap, Zero Sticky Overlap) */}
+        <div className="md:hidden w-full max-w-full bg-white/95 dark:bg-stone-950/95 border-b border-emerald-500/15 dark:border-stone-800">
           <div className="w-full max-w-[1280px] mx-auto px-3 sm:px-6 py-2">
-            <div className="relative w-full max-w-full rounded-full overflow-hidden border border-emerald-500/20 dark:border-stone-800 bg-slate-100/95 dark:bg-stone-900/95 shadow-2xs">
-              <nav
-                aria-label="Mobile Navigation Bar"
-                className="flex items-center justify-between sm:justify-start gap-0.5 sm:gap-1 overflow-x-auto no-scrollbar py-1 px-1 whitespace-nowrap flex-nowrap w-full max-w-full"
-              >
-                {mobileDesks.map((d) => {
-                  const IconComponent = d.Icon;
-                  const isActive = activeDesk === d.id;
-                  return (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => handleProtectedNavigate(d.id)}
-                      className={`min-h-[36px] sm:min-h-[40px] inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-full shrink-0 tracking-tight transition-all duration-200 active:scale-[0.98] cursor-pointer ${
+            <nav
+              aria-label="Mobile Navigation Bar"
+              className="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl w-full bg-slate-100/95 dark:bg-stone-900/95 border border-emerald-500/20 dark:border-stone-800 shadow-2xs"
+            >
+              {mobileDesks.map((d, idx) => {
+                const IconComponent = d.Icon;
+                const isActive = activeDesk === d.id;
+                const spanFullOnOddTail =
+                  mobileDesks.length % 2 === 1 && idx === mobileDesks.length - 1;
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => handleProtectedNavigate(d.id)}
+                    className={`min-h-[40px] w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs font-bold rounded-xl tracking-tight transition-all duration-200 active:scale-[0.98] cursor-pointer whitespace-nowrap ${
+                      spanFullOnOddTail ? 'col-span-2' : ''
+                    } ${
+                      isActive
+                        ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
+                        : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669]'
+                    }`}
+                  >
+                    <IconComponent
+                      className={`w-3.5 h-3.5 shrink-0 ${
                         isActive
-                          ? 'bg-gradient-to-r from-[#059669] to-[#047857] text-white shadow-sm'
-                          : 'text-slate-800 dark:text-stone-200 hover:bg-white dark:hover:bg-stone-800 hover:text-[#059669]'
+                          ? 'text-emerald-100'
+                          : 'text-[#059669] dark:text-emerald-400'
                       }`}
-                    >
-                      <IconComponent
-                        className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${
-                          isActive
-                            ? 'text-emerald-100'
-                            : 'text-[#059669] dark:text-emerald-400'
-                        }`}
-                      />
-                      <span>{lang === 'en' ? d.en : d.bn}</span>
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
+                    />
+                    <span className="truncate">
+                      {lang === 'en' ? d.en : d.bn}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+
+        {/* Compact Single-Row Utility Bar Directly Below Main Nav Bar (All Views) */}
+        <div
+          aria-label="Display and Quick Utility Controls"
+          className="w-full max-w-[1280px] mx-auto px-3 sm:px-6 lg:px-8 pt-1.5"
+        >
+          <div className="flex items-center justify-between sm:justify-end gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1.5 px-0.5 text-[11px] sm:text-xs">
+            <button
+              type="button"
+              onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
+              className="min-h-[36px] sm:min-h-[38px] inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 text-stone-700 dark:text-stone-200 hover:border-[#047857] shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <span aria-hidden="true">🌐</span>
+              <span>বাংলা / English</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (activeDesk !== 'tutors') {
+                  handleUpdateFilters({ shortlistedOnly: true });
+                  handleProtectedNavigate('tutors');
+                } else {
+                  handleUpdateFilters({
+                    shortlistedOnly: !filters.shortlistedOnly,
+                  });
+                }
+              }}
+              aria-pressed={filters.shortlistedOnly}
+              className={`min-h-[36px] sm:min-h-[38px] inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold border shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
+                filters.shortlistedOnly
+                  ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-400 text-amber-900 dark:text-amber-300'
+                  : 'bg-white dark:bg-stone-900 border-emerald-500/20 dark:border-stone-800 text-stone-700 dark:text-stone-200 hover:border-[#047857]'
+              }`}
+            >
+              <span aria-hidden="true">
+                {filters.shortlistedOnly ? '❤️' : '🤍'}
+              </span>
+              <span>
+                {lang === 'en'
+                  ? `Shortlisted (${shortlistedIds.length})`
+                  : `পছন্দের তালিকা (${toBanglaNumber(shortlistedIds.length)})`}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDarkMode((d) => !d)}
+              aria-pressed={darkMode}
+              className="min-h-[36px] sm:min-h-[38px] inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-bold bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 text-stone-700 dark:text-stone-200 hover:border-[#047857] shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <span aria-hidden="true">{darkMode ? '☀️' : '🌙'}</span>
+              <span>
+                {darkMode
+                  ? lang === 'en'
+                    ? 'Light Mode'
+                    : 'লাইট মোড'
+                  : lang === 'en'
+                  ? 'Dark Mode'
+                  : 'ডার্ক মোড'}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -3029,16 +3098,6 @@ export default function App() {
           <div className="space-y-4">
             <BentoHero
               lang={lang}
-              onToggleLang={setLang}
-              darkMode={darkMode}
-              onToggleDark={() => setDarkMode((d) => !d)}
-              shortlistCount={shortlistedIds.length}
-              shortlistedOnly={filters.shortlistedOnly}
-              onToggleShortlistedOnly={() =>
-                handleUpdateFilters({
-                  shortlistedOnly: !filters.shortlistedOnly,
-                })
-              }
               filters={filters}
               onUpdateFilters={handleUpdateFilters}
               onResetFilters={() => setFilters(DEFAULT_FILTERS)}
@@ -3373,9 +3432,16 @@ export default function App() {
                 Media Fee &amp; Refund Policy
               </button>
             </div>
-            <p className="text-[11px] font-semibold text-stone-400 dark:text-stone-500">
-              Official Issuer &amp; Platform Architecture · Tutor Zone · Drabir Mandal
-            </p>
+            <div className="flex flex-col items-center lg:items-end gap-2">
+              <div className="md:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-2xs text-[11px] font-bold">
+                <span className="bg-gradient-to-r from-emerald-600 to-indigo-600 dark:from-emerald-400 dark:to-indigo-400 bg-clip-text text-transparent font-extrabold">
+                  ⚡ Crafted by Drabir Mandal
+                </span>
+              </div>
+              <p className="text-[11px] font-semibold text-stone-400 dark:text-stone-500 text-center lg:text-right">
+                Official Issuer &amp; Platform Architecture · Tutor Zone · Drabir Mandal
+              </p>
+            </div>
           </div>
         </div>
       </footer>
@@ -3486,12 +3552,12 @@ export default function App() {
         initialTab={termsModalTab}
       />
 
-      {/* Subtle, Non-Intrusive Floating Corner Watermark Badge */}
+      {/* Subtle, Non-Intrusive Floating Corner Watermark Badge (Desktop Only to Keep Mobile Cards Clear) */}
       <div
         aria-label="Official Developer Watermark"
-        className="no-print print:hidden fixed bottom-3 left-3 sm:bottom-4 sm:left-4 z-40 pointer-events-none select-none"
+        className="no-print print:hidden hidden md:block fixed bottom-4 left-4 z-40 pointer-events-none select-none"
       >
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/85 dark:bg-stone-900/85 backdrop-blur-md border border-stone-200/80 dark:border-stone-800/80 shadow-xs text-[10px] sm:text-[11px] font-bold text-stone-600 dark:text-stone-300">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/85 dark:bg-stone-900/85 backdrop-blur-md border border-stone-200/80 dark:border-stone-800/80 shadow-xs text-[11px] font-bold text-stone-600 dark:text-stone-300">
           <span className="bg-gradient-to-r from-emerald-600 to-indigo-600 dark:from-emerald-400 dark:to-indigo-400 bg-clip-text text-transparent font-extrabold">
             ⚡ Crafted by Drabir Mandal
           </span>

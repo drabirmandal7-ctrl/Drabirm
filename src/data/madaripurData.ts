@@ -12,8 +12,6 @@ export const MADARIPUR_UPAZILAS: Exclude<Upazila, 'All'>[] = [
   'Kalkini',
   'Rajoir',
   'Dasar',
-  'Charmuguria',
-  'Mostofapur',
 ];
 
 export const UPAZILA_LABELS: Record<
@@ -23,8 +21,8 @@ export const UPAZILA_LABELS: Record<
   All: {
     en: 'All Areas',
     bn: 'সকল এলাকা',
-    subEn: '7 Hubs · All Regions',
-    subBn: '৭টি হাব · সকল অঞ্চল',
+    subEn: '5 Hubs · All Regions',
+    subBn: '৫টি হাব · সকল অঞ্চল',
     count: 0,
   },
   'Madaripur Sadar': {
@@ -60,20 +58,6 @@ export const UPAZILA_LABELS: Record<
     bn: 'ডাসার',
     subEn: 'Govt. Sheikh Hasina Academy · Nabagram',
     subBn: 'ডাসার উপজেলা · নবগ্রাম · কাজীবাকাই',
-    count: 0,
-  },
-  Charmuguria: {
-    en: 'Charmuguria',
-    bn: 'চরমগুরিয়া',
-    subEn: 'Historic Port · Jute Market · Sadar East',
-    subBn: 'চরমগুরিয়া বন্দর · মার্চেন্ট রোড',
-    count: 0,
-  },
-  Mostofapur: {
-    en: 'Mostofapur',
-    bn: 'মস্তফাপুর',
-    subEn: 'Mostofapur Chourasta · Highway Junction',
-    subBn: 'মস্তফাপুর চৌরাস্তা · পর্বত বাগান',
     count: 0,
   },
 };

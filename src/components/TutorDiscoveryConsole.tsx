@@ -160,23 +160,23 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
       {/* Sleek Ultra-Compact Tutor Filter Deck */}
       <div className="p-3 bg-white dark:bg-stone-900 rounded-2xl border border-emerald-500/20 dark:border-stone-800 shadow-sm mb-6 sm:mb-8 w-full max-w-full overflow-hidden">
         {/* 1. Default Ultra-Compact Top Bar (Single Slim Row) */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full">
+        <div className="flex items-center flex-nowrap gap-2 w-full">
           {/* Slim Search Input */}
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               id="tutor-search-input"
               type="text"
               placeholder={
                 lang === 'en'
-                  ? 'Search Subject, College, or Landmark...'
-                  : 'বিষয়, কলেজ বা এলাকার নাম লিখে খুঁজুন...'
+                  ? 'Search Subject, College, Area...'
+                  : 'বিষয়, কলেজ বা এলাকা খুঁজুন...'
               }
               value={filters.searchQuery}
               onChange={(e) =>
                 onUpdateFilters({ searchQuery: e.target.value })
               }
-              className="w-full min-h-[44px] pl-10 pr-3.5 py-2 text-base sm:text-sm rounded-xl bg-slate-50 dark:bg-stone-800 border border-slate-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-[#047857]"
+              className="w-full min-h-[44px] pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-50 dark:bg-stone-800 border border-slate-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-[#047857]"
             />
           </div>
 
@@ -185,7 +185,7 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
             <button
               type="button"
               onClick={onResetFilters}
-              className="min-h-[44px] text-xs font-bold text-[#047857] dark:text-emerald-400 hover:underline px-2 py-1 whitespace-nowrap shrink-0 active:scale-[0.98] transition-all cursor-pointer"
+              className="hidden sm:inline-flex min-h-[44px] items-center text-xs font-bold text-[#047857] dark:text-emerald-400 hover:underline px-2 py-1 whitespace-nowrap shrink-0 active:scale-[0.98] transition-all cursor-pointer"
             >
               {lang === 'en' ? 'Reset' : 'রিসেট'}
             </button>
@@ -196,7 +196,7 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
             type="button"
             onClick={() => setIsFilterOpen((prev) => !prev)}
             aria-expanded={isFilterOpen}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] text-white flex items-center gap-1.5 shrink-0 active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+            className="min-h-[44px] px-3 sm:px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] text-white flex items-center gap-1.5 shrink-0 whitespace-nowrap active:scale-[0.98] transition-all shadow-xs cursor-pointer"
           >
             <span>⚙️</span>
             <span>{lang === 'en' ? 'Filter' : 'ফিল্টার'}</span>
@@ -422,25 +422,28 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
       {isLoading && filteredTutors.length === 0 ? (
         <div
           aria-label="Loading verified tutors"
-          className="grid grid-cols-1 md:grid-cols-2 gap-6"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5"
         >
           {[1, 2, 3, 4].map((skeletonIdx) => (
             <div
               key={skeletonIdx}
-              className="rounded-2xl bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 p-6 shadow-sm animate-pulse space-y-4"
+              className="rounded-2xl bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 p-4 sm:p-5 shadow-sm animate-pulse space-y-2.5"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-stone-200 dark:bg-stone-800 shrink-0" />
+              <div className="flex items-center justify-between gap-2">
+                <div className="h-5 w-40 rounded-full bg-emerald-100 dark:bg-emerald-950/60" />
+                <div className="h-7 w-16 rounded-lg bg-stone-100 dark:bg-stone-800" />
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-stone-200 dark:bg-stone-800 shrink-0" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-4 w-36 rounded-full bg-emerald-100 dark:bg-emerald-950/60" />
-                  <div className="h-5 w-48 rounded-lg bg-stone-200 dark:bg-stone-800" />
-                  <div className="h-3.5 w-40 rounded-lg bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-5 w-44 rounded-lg bg-stone-200 dark:bg-stone-800" />
+                  <div className="h-3.5 w-56 rounded-lg bg-stone-100 dark:bg-stone-800" />
                 </div>
               </div>
-              <div className="h-12 w-full rounded-xl bg-stone-100 dark:bg-stone-800" />
-              <div className="flex items-center justify-between pt-3 border-t border-stone-100 dark:border-stone-800">
-                <div className="h-8 w-28 rounded-xl bg-emerald-50 dark:bg-emerald-950/50" />
-                <div className="h-10 w-40 rounded-xl bg-stone-200 dark:bg-stone-800" />
+              <div className="h-8 w-full rounded-xl bg-slate-100 dark:bg-stone-800" />
+              <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-stone-800">
+                <div className="h-9 w-28 rounded-xl bg-emerald-50 dark:bg-emerald-950/50" />
+                <div className="h-9 w-40 rounded-xl bg-stone-200 dark:bg-stone-800" />
               </div>
             </div>
           ))}
@@ -487,7 +490,7 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
           {filteredTutors.map((tutor) => {
             const isShortlisted = shortlistedIds.includes(tutor.id);
             const isTrialBooked = bookedTutorIds.includes(tutor.id);
@@ -496,78 +499,57 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
               lang === 'en' ? tutor.subjectsEn : tutor.subjectsBn;
             const areas =
               lang === 'en' ? tutor.coveredAreasEn : tutor.coveredAreasBn;
+            const rawBio = (lang === 'en' ? tutor.bioEn : tutor.bioBn) || '';
+            const isAutoGeneratedBio =
+              rawBio.startsWith('Verified educator from ') ||
+              rawBio.startsWith('যাচাইকৃত শিক্ষক') ||
+              rawBio.trim() === '';
+            const compactResponseTime =
+              lang === 'en'
+                ? tutor.responseTimeEn.replace(/\bmins?\b/i, 'm')
+                : tutor.responseTimeBn;
 
             return (
               <article
                 key={tutor.id}
-                className="rounded-2xl bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 p-5 sm:p-6 flex flex-col justify-between shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 hover:border-[#047857]/50"
+                data-testid="compact-tutor-card"
+                className="rounded-2xl bg-white dark:bg-stone-900 border border-emerald-500/20 dark:border-stone-800 p-3.5 sm:p-4 flex flex-col justify-between shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 hover:border-[#047857]/50 overflow-hidden"
               >
                 <div>
-                  {/* Top Row: Portrait + Name + Verification Status + Shortlist & Delete */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4">
-                      {tutor.profilePhotoUrl ? (
-                        <img
-                          src={tutor.profilePhotoUrl}
-                          alt={`Verified photo of ${tutor.nameEn}`}
-                          loading="lazy"
-                          decoding="async"
-                          referrerPolicy="no-referrer"
-                          className="w-16 h-16 rounded-full object-cover border-2 border-[#059669]/50 shrink-0 shadow-xs"
-                        />
-                      ) : (
-                        <TutorPortraitSvg
-                          variant={tutor.portraitVariant}
-                          className="w-16 h-16"
-                        />
-                      )}
-                      <div>
-                        {/* Premium Badge Pills: Glowing Smart NID Verified + Upazila Location Pill */}
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold mb-1.5">
-                          {isVerified ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500/30 text-[#047857] dark:text-emerald-300 font-extrabold shadow-2xs">
-                              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                              <span>
-                                {lang === 'en'
-                                  ? 'Smart NID Verified'
-                                  : 'স্মার্ট এনআইডি ভেরিফায়েড'}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 border border-amber-400/40 text-amber-700 dark:text-amber-300 font-bold">
-                              <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                              <span>
-                                {lang === 'en'
-                                  ? 'Verification Pending'
-                                  : 'ভেরিফিকেশন পেন্ডিং'}
-                              </span>
-                            </span>
-                          )}
-
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 dark:bg-stone-800 border border-emerald-500/20 dark:border-stone-700 text-stone-700 dark:text-stone-300 font-bold">
-                            <MapPin className="w-3 h-3 text-[#059669] dark:text-emerald-400 shrink-0" />
-                            <span>
-                              {lang === 'en'
-                                ? tutor.upazila
-                                : UPAZILA_LABELS[tutor.upazila].bn}
-                            </span>
+                  {/* 1. Compact Top Header Row: Verification & Location Pills Left, Action Icons Right */}
+                  <div className="flex items-center justify-between gap-1.5 mb-2">
+                    <div className="flex flex-wrap items-center gap-1 min-w-0">
+                      {isVerified ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500/30 text-[#047857] dark:text-emerald-300 text-[11px] font-extrabold whitespace-nowrap">
+                          <ShieldCheck className="w-3 h-3 shrink-0" />
+                          <span>
+                            {lang === 'en'
+                              ? 'Smart NID Verified'
+                              : 'স্মার্ট এনআইডি ভেরিফায়েড'}
                           </span>
-                        </div>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 border border-amber-400/40 text-amber-700 dark:text-amber-300 text-[11px] font-bold whitespace-nowrap">
+                          <ShieldAlert className="w-3 h-3 shrink-0" />
+                          <span>
+                            {lang === 'en'
+                              ? 'Pending Verification'
+                              : 'পেন্ডিং ভেরিফিকেশন'}
+                          </span>
+                        </span>
+                      )}
 
-                        <h3 className="text-lg font-extrabold text-stone-900 dark:text-stone-50 leading-snug">
-                          {lang === 'en' ? tutor.nameEn : tutor.nameBn}
-                        </h3>
-
-                        <p className="text-xs font-semibold text-stone-600 dark:text-stone-300 mt-0.5">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 dark:bg-stone-800 border border-emerald-500/20 dark:border-stone-700 text-stone-700 dark:text-stone-300 text-[11px] font-bold whitespace-nowrap">
+                        <MapPin className="w-3 h-3 text-[#059669] dark:text-emerald-400 shrink-0" />
+                        <span>
                           {lang === 'en'
-                            ? tutor.institutionFullEn
-                            : tutor.institutionFullBn}
-                        </p>
-                      </div>
+                            ? tutor.upazila
+                            : UPAZILA_LABELS[tutor.upazila]?.bn || tutor.upazila}
+                        </span>
+                      </span>
                     </div>
 
-                    {/* Shortlist Heart & Delete Action */}
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
                         onClick={() => onToggleShortlist(tutor.id)}
@@ -577,14 +559,14 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
                             : `Save ${tutor.nameEn} to shortlist`
                         }
                         aria-pressed={isShortlisted}
-                        className={`min-h-[40px] min-w-[40px] p-2 rounded-xl border active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer ${
+                        className={`w-7 h-7 sm:w-8 sm:h-8 p-1 rounded-lg border active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer ${
                           isShortlisted
                             ? 'bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-400'
                             : 'bg-[#FAF8F5] dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-400 hover:text-stone-700'
                         }`}
                       >
                         <Heart
-                          className={`w-4 h-4 ${
+                          className={`w-3.5 h-3.5 ${
                             isShortlisted ? 'fill-amber-500 text-amber-500' : ''
                           }`}
                         />
@@ -594,129 +576,173 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
                         type="button"
                         onClick={() => onDeleteTutor(tutor.id)}
                         aria-label={`Delete tutor profile ${tutor.nameEn}`}
-                        className="min-h-[40px] min-w-[40px] p-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-[#FAF8F5] dark:bg-stone-800 text-stone-400 hover:text-red-600 hover:border-red-300 active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer"
+                        className="w-7 h-7 sm:w-8 sm:h-8 p-1 rounded-lg border border-stone-200 dark:border-stone-700 bg-[#FAF8F5] dark:bg-stone-800 text-stone-400 hover:text-red-600 hover:border-red-300 active:scale-[0.98] transition-all flex items-center justify-center cursor-pointer"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Visible Average Star Rating & Unboxed Metadata Line */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600 dark:text-stone-400 mt-4 pt-3.5 border-t border-stone-100 dark:border-stone-800">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Visible Star Rating Display */}
+                  {/* 2. Profile Identity Row: Avatar Left + Full Remaining Width for Name & College */}
+                  <div className="flex items-start gap-3">
+                    {tutor.profilePhotoUrl ? (
+                      <img
+                        src={tutor.profilePhotoUrl}
+                        alt={`Verified photo of ${tutor.nameEn}`}
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-full shrink-0 object-cover border-2 border-emerald-500/30 shadow-xs"
+                      />
+                    ) : (
+                      <TutorPortraitSvg
+                        variant={tutor.portraitVariant}
+                        className="w-14 h-14 sm:w-16 sm:h-16 shrink-0"
+                      />
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-stone-50 leading-snug truncate">
+                        {lang === 'en' ? tutor.nameEn : tutor.nameBn}
+                      </h3>
+                      <p className="text-xs sm:text-sm font-medium text-emerald-800 dark:text-emerald-300 leading-snug mt-0.5 line-clamp-2">
+                        {lang === 'en'
+                          ? tutor.institutionFullEn
+                          : tutor.institutionFullBn}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3. Compact Stats & Rating Strip */}
+                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-1 bg-slate-50 dark:bg-stone-800/80 border border-slate-100 dark:border-stone-700/70 px-2 sm:px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs my-2 text-stone-600 dark:text-stone-300">
+                    <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => onOpenProfileModal(tutor)}
-                        className="inline-flex items-center gap-1 font-bold text-stone-900 dark:text-white font-mono-num hover:text-[#047857] dark:hover:text-emerald-400 cursor-pointer"
+                        className="inline-flex items-center gap-0.5 font-bold text-stone-900 dark:text-white font-mono-num hover:text-[#047857] dark:hover:text-emerald-400 cursor-pointer"
                       >
-                        <span className="inline-flex items-center">
-                          {[1, 2, 3, 4, 5].map((starIdx) => (
-                            <Star
-                              key={starIdx}
-                              className={`w-3.5 h-3.5 ${
-                                starIdx <= Math.round(tutor.rating)
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-stone-300 dark:text-stone-600'
-                              }`}
-                            />
-                          ))}
-                        </span>
-                        <span className="ml-0.5">
+                        <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                        <span>
                           {lang === 'bn'
                             ? toBanglaNumber(tutor.rating.toFixed(2))
                             : tutor.rating.toFixed(2)}
                         </span>
-                        <span className="font-normal text-stone-500">
+                        <span className="font-normal text-stone-500 dark:text-stone-400">
                           (
                           {lang === 'bn'
-                            ? `${toBanglaNumber(tutor.totalReviews)}টি রিভিউ`
-                            : `${tutor.totalReviews} reviews`}
+                            ? toBanglaNumber(tutor.totalReviews)
+                            : tutor.totalReviews}
                           )
                         </span>
                       </button>
 
-                      <span aria-hidden="true">·</span>
-                      <span className="font-mono-num">
-                        {lang === 'en'
-                          ? `${tutor.experienceYears} yrs exp`
-                          : `${toBanglaNumber(tutor.experienceYears)} বছরের অভিজ্ঞতা`}
+                      <span aria-hidden="true" className="text-stone-300 dark:text-stone-600">
+                        ·
                       </span>
-                      <span aria-hidden="true">·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-[#047857] dark:text-emerald-400" />
-                        {lang === 'en'
-                          ? tutor.responseTimeEn
-                          : tutor.responseTimeBn}
+                      <span className="font-mono-num whitespace-nowrap">
+                        {lang === 'en' ? (
+                          <>
+                            {tutor.experienceYears} yrs
+                            <span className="hidden min-[380px]:inline"> exp</span>
+                          </>
+                        ) : (
+                          `${toBanglaNumber(tutor.experienceYears)} বছর`
+                        )}
+                      </span>
+
+                      <span aria-hidden="true" className="text-stone-300 dark:text-stone-600">
+                        ·
+                      </span>
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
+                        <Clock className="w-3 h-3 text-[#047857] dark:text-emerald-400 shrink-0" />
+                        <span>{compactResponseTime}</span>
                       </span>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => onOpenProfileModal(tutor)}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#047857] dark:text-emerald-400 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-[#047857] dark:text-emerald-400 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
                     >
-                      <MessageSquarePlus className="w-3.5 h-3.5" />
+                      <MessageSquarePlus className="w-3 h-3 shrink-0" />
                       <span>
-                        {lang === 'en' ? 'Rate & Review' : 'রেটিং ও রিভিউ দিন'}
+                        {lang === 'en' ? 'Rate & Review' : 'রিভিউ দিন'}
                       </span>
                     </button>
                   </div>
 
-                  {/* Bio Excerpt */}
-                  <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 leading-relaxed mt-3">
-                    {lang === 'en' ? tutor.bioEn : tutor.bioBn}
-                  </p>
+                  {/* 4. Optional Non-Redundant Bio (1 Line Max) + Compact 2-Column Info Grid */}
+                  {!isAutoGeneratedBio && (
+                    <p className="line-clamp-1 text-xs text-slate-500 dark:text-stone-400 mb-1.5">
+                      {rawBio}
+                    </p>
+                  )}
 
-                  {/* Unboxed Subjects & Covered Landmarks */}
-                  <div className="mt-4 space-y-1.5 text-xs">
-                    <div className="text-stone-700 dark:text-stone-300">
-                      <span className="font-semibold text-stone-900 dark:text-stone-100">
-                        {lang === 'en' ? 'Subjects: ' : 'পড়ানোর বিষয়: '}
+                  <div className="grid grid-cols-2 gap-1.5 text-xs mb-2">
+                    <div className="px-2 py-1 rounded-lg bg-[#FAF8F5] dark:bg-stone-800/60 border border-stone-200/70 dark:border-stone-700/60 min-w-0">
+                      <span className="block text-[9px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 leading-tight">
+                        {lang === 'en' ? 'Subjects' : 'বিষয়সমূহ'}
                       </span>
-                      <span>{subjects.join(' · ')}</span>
+                      <span className="block text-[11px] sm:text-xs font-medium text-stone-800 dark:text-stone-200 truncate">
+                        {subjects.join(' · ')}
+                      </span>
                     </div>
-                    <div className="text-stone-600 dark:text-stone-400">
-                      <span className="font-semibold text-stone-800 dark:text-stone-200">
-                        {lang === 'en' ? 'Service Areas: ' : 'কভারেজ এলাকা: '}
+                    <div className="px-2 py-1 rounded-lg bg-[#FAF8F5] dark:bg-stone-800/60 border border-stone-200/70 dark:border-stone-700/60 min-w-0">
+                      <span className="block text-[9px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 leading-tight">
+                        {lang === 'en' ? 'Service Areas' : 'কভারেজ এলাকা'}
                       </span>
-                      <span>{areas.join(' · ')}</span>
+                      <span className="block text-[11px] sm:text-xs font-medium text-stone-700 dark:text-stone-300 truncate">
+                        {areas.join(' · ')}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Card Footer: Monthly Salary Highlight Badge + Full Profile & Reviews Modal + Book 2 Free Trial Classes */}
-                <div className="mt-5 pt-4 border-t border-stone-200/80 dark:border-stone-800 flex flex-wrap items-center justify-between gap-3">
-                  <div className="px-3 py-1.5 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-500/25">
-                    <span className="block text-[10px] uppercase tracking-wider font-bold text-[#047857] dark:text-emerald-400">
+                {/* 5. Single-Row Bottom Footer: Monthly Honorarium Left + Compact Action Buttons Right */}
+                <div className="flex items-center justify-between gap-1 sm:gap-2 pt-2 border-t border-slate-100 dark:border-stone-800">
+                  <div className="px-2 py-1 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-500/25 shrink-0">
+                    <span className="block text-[8px] sm:text-[9px] uppercase tracking-tight sm:tracking-wider font-bold text-[#047857] dark:text-emerald-400 leading-tight">
                       {lang === 'en' ? 'Monthly Honorarium' : 'মাসিক সম্মানী'}
                     </span>
-                    <span className="text-base sm:text-lg font-extrabold font-mono-num text-stone-900 dark:text-white">
-                      {formatBDT(tutor.monthlyFee, lang)}
-                    </span>
-                    <span className="text-xs text-stone-500 dark:text-stone-400">
-                      {lang === 'en' ? ' / month' : ' / মাস'}
-                    </span>
+                    <div className="leading-tight">
+                      <span className="text-xs sm:text-base font-extrabold font-mono-num text-stone-900 dark:text-white">
+                        {formatBDT(tutor.monthlyFee, lang)}
+                      </span>
+                      <span className="text-[10px] sm:text-[11px] text-stone-500 dark:text-stone-400">
+                        {lang === 'en' ? '/mo' : '/মাস'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => onOpenProfileModal(tutor)}
-                      className="min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] dark:bg-stone-800 hover:bg-stone-200/70 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 text-xs font-semibold active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                      className="min-h-[36px] sm:min-h-[38px] inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-xl bg-[#FAF8F5] dark:bg-stone-800 hover:bg-stone-200/70 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 text-[11px] sm:text-xs font-semibold active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
                     >
-                      <FileText className="w-3.5 h-3.5" />
+                      <FileText className="hidden min-[380px]:inline w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
                       <span>
-                        {lang === 'en'
-                          ? `Profile & Reviews (${tutor.totalReviews})`
-                          : `প্রোফাইল ও রিভিউ (${toBanglaNumber(tutor.totalReviews)})`}
+                        {lang === 'en' ? 'Profile & Reviews' : 'প্রোফাইল ও রিভিউ'}
+                        <span className="hidden sm:inline">
+                          {' '}
+                          (
+                          {lang === 'bn'
+                            ? toBanglaNumber(tutor.totalReviews)
+                            : tutor.totalReviews}
+                          )
+                        </span>
                       </span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onOpenTrialModal(tutor)}
-                      className={`min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                      aria-label={
+                        lang === 'en'
+                          ? 'Book 2 Free Trial Classes'
+                          : '২টি ফ্রি ট্রায়াল ক্লাস বুক করুন'
+                      }
+                      className={`min-h-[36px] sm:min-h-[38px] inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                         isTrialBooked
                           ? 'bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-500/40'
                           : 'bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#047857] hover:to-[#065F46] text-white shadow-xs'
@@ -724,20 +750,21 @@ export const TutorDiscoveryConsole: React.FC<TutorDiscoveryConsoleProps> = ({
                     >
                       {isTrialBooked ? (
                         <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400" />
-                          <span>
-                            {lang === 'en'
-                              ? 'Trial Requested'
-                              : 'ট্রায়াল বুক হয়েছে'}
-                          </span>
+                          <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#047857] dark:text-emerald-400 shrink-0" />
+                          <span>{lang === 'en' ? 'Booked' : 'বুক হয়েছে'}</span>
                         </>
                       ) : (
                         <>
-                          <CalendarCheck className="w-3.5 h-3.5" />
+                          <CalendarCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
                           <span>
-                            {lang === 'en'
-                              ? 'Book 2 Free Trial Classes'
-                              : '২টি ফ্রি ট্রায়াল ক্লাস বুক করুন'}
+                            {lang === 'en' ? (
+                              <>
+                                <span className="hidden sm:inline">Free </span>
+                                Trial
+                              </>
+                            ) : (
+                              'ট্রায়াল'
+                            )}
                           </span>
                         </>
                       )}

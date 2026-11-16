@@ -6,9 +6,7 @@ export type Upazila =
   | 'Shibchar'
   | 'Kalkini'
   | 'Rajoir'
-  | 'Dasar'
-  | 'Charmuguria'
-  | 'Mostofapur';
+  | 'Dasar';
 
 export type TutoringMode =
   | 'All'

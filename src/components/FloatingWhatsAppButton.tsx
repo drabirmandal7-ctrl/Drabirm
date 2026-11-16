@@ -34,7 +34,7 @@ export const FloatingWhatsAppButton: React.FC<FloatingWhatsAppButtonProps> = ({
   return (
     <div
       data-testid="floating-whatsapp-widget"
-      className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 group pointer-events-none"
+      className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-50 flex items-center gap-2.5 group pointer-events-none"
     >
       <span
         role="tooltip"
@@ -57,7 +57,7 @@ export const FloatingWhatsAppButton: React.FC<FloatingWhatsAppButtonProps> = ({
             ? 'Need Help? Chat on WhatsApp'
             : 'সাহায্য প্রয়োজন? হোয়াটসঅ্যাপে চ্যাট করুন'
         }
-        className="pointer-events-auto relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-tr from-[#128C7E] via-[#25D366] to-[#2FE376] text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center ring-4 ring-[#25D366]/25 focus:outline-none focus:ring-[#25D366]/50 cursor-pointer"
+        className="pointer-events-auto relative w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-gradient-to-tr from-[#128C7E] via-[#25D366] to-[#2FE376] text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center ring-4 ring-[#25D366]/25 focus:outline-none focus:ring-[#25D366]/50 cursor-pointer"
       >
         <span
           aria-hidden="true"
@@ -65,7 +65,7 @@ export const FloatingWhatsAppButton: React.FC<FloatingWhatsAppButtonProps> = ({
         />
 
         <svg
-          className="w-6 h-6 sm:w-7 sm:h-7 fill-current relative z-10 drop-shadow-xs"
+          className="w-5 h-5 sm:w-7 sm:h-7 fill-current relative z-10 drop-shadow-xs"
           viewBox="0 0 24 24"
           aria-hidden="true"
         >

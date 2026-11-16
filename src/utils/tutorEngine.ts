@@ -791,8 +791,6 @@ const VALID_UPAZILAS: Exclude<Upazila, 'All'>[] = [
   'Kalkini',
   'Rajoir',
   'Dasar',
-  'Charmuguria',
-  'Mostofapur',
 ];
 
 export function mapTuitionJobToCircularRow(
@@ -2343,8 +2341,6 @@ export const MEMOIZED_ALL_UPAZILAS: readonly Upazila[] = Object.freeze([
   'Kalkini',
   'Rajoir',
   'Dasar',
-  'Charmuguria',
-  'Mostofapur',
 ] as const);
 
 export const MEMOIZED_COLLEGE_TAGS: readonly CollegeTag[] = Object.freeze([
