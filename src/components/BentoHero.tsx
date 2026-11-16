@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import {
   BookOpen,
   Briefcase,
@@ -50,6 +54,7 @@ interface BentoHeroProps {
   verifiedTutorsCount?: number;
   onlineTutorsCount?: number;
   activeCircularsCount?: number;
+  totalApplicationsCount?: number;
   siteSocialSettings?: SiteSocialSettings;
 }
 
@@ -79,6 +84,7 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
   verifiedTutorsCount = 6,
   onlineTutorsCount = 4,
   activeCircularsCount = 4,
+  totalApplicationsCount = 0,
   siteSocialSettings,
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -89,6 +95,7 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
       verifiedTutorsCount,
       onlineTutorsCount,
       activeCircularsCount,
+      totalApplicationsCount,
     },
     lang
   );

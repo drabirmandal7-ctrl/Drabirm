@@ -4281,10 +4281,15 @@ export interface SiteSocialSettings {
   nagadNumber?: string;
   verificationFee?: number;
   stats_mode?: HomepageStatsMode;
+  counter_mode?: HomepageStatsMode;
   manual_verified_tutors?: string;
+  verified_tutors?: string;
   manual_online_tutors?: string;
+  online_tutors?: string;
   manual_active_circulars?: string;
+  active_circulars?: string;
   manual_total_applications?: string;
+  total_applications?: string;
   trust_card_3_value?: string;
   trust_card_3_label?: string;
   trust_card_4_value?: string;
@@ -4308,10 +4313,15 @@ export const DEFAULT_SITE_SOCIAL_SETTINGS: SiteSocialSettings = {
   nagadNumber: DEFAULT_NAGAD_NUMBER,
   verificationFee: DEFAULT_VERIFICATION_FEE_BDT,
   stats_mode: 'auto',
+  counter_mode: 'auto',
   manual_verified_tutors: '120+',
+  verified_tutors: '120+',
   manual_online_tutors: '45+',
+  online_tutors: '45+',
   manual_active_circulars: '30+',
+  active_circulars: '30+',
   manual_total_applications: '85',
+  total_applications: '85',
   trust_card_3_value: '100%',
   trust_card_3_label: '100% Smart NID Verified',
   trust_card_4_value: '< 24h',
@@ -4327,7 +4337,7 @@ export const DEFAULT_SITE_SOCIAL_SETTINGS: SiteSocialSettings = {
 };
 
 /**
- * Resolves live homepage Trust Strip counters & hero copy based on `stats_mode` ('auto' vs 'manual').
+ * Resolves live homepage Trust Strip counters & hero copy based on `stats_mode` / `counter_mode` ('auto' vs 'manual').
  */
 export function resolveHomepageLiveStats(
   settings: Partial<SiteSocialSettings> | null | undefined,
@@ -4357,8 +4367,13 @@ export function resolveHomepageLiveStats(
   tutorCardDesc: string;
 } {
   const s = { ...DEFAULT_SITE_SOCIAL_SETTINGS, ...(settings || {}) };
+  const rawMode =
+    settings?.stats_mode ??
+    settings?.counter_mode ??
+    s.stats_mode ??
+    s.counter_mode;
   const statsMode: HomepageStatsMode =
-    s.stats_mode === 'manual' ? 'manual' : 'auto';
+    rawMode === 'manual' ? 'manual' : 'auto';
 
   const autoVerifiedStr =
     lang === 'bn'
@@ -4376,24 +4391,43 @@ export function resolveHomepageLiveStats(
   const autoApplicationsStr =
     lang === 'bn' ? `${toBanglaNumber(rawAutoApps)}` : `${rawAutoApps}`;
 
+  const manualVerified =
+    settings?.manual_verified_tutors ??
+    settings?.verified_tutors ??
+    s.manual_verified_tutors ??
+    s.verified_tutors ??
+    DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors!;
+  const manualOnline =
+    settings?.manual_online_tutors ??
+    settings?.online_tutors ??
+    s.manual_online_tutors ??
+    s.online_tutors ??
+    DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors!;
+  const manualCirculars =
+    settings?.manual_active_circulars ??
+    settings?.active_circulars ??
+    s.manual_active_circulars ??
+    s.active_circulars ??
+    DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars!;
+  const manualApps =
+    settings?.manual_total_applications ??
+    settings?.total_applications ??
+    s.manual_total_applications ??
+    s.total_applications ??
+    DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications!;
+
   return {
     statsMode,
     verifiedTutorsDisplay:
-      statsMode === 'manual'
-        ? (s.manual_verified_tutors || DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors!).trim()
-        : autoVerifiedStr,
+      statsMode === 'manual' ? String(manualVerified).trim() : autoVerifiedStr,
     onlineTutorsDisplay:
-      statsMode === 'manual'
-        ? (s.manual_online_tutors || DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors!).trim()
-        : autoOnlineStr,
+      statsMode === 'manual' ? String(manualOnline).trim() : autoOnlineStr,
     activeCircularsDisplay:
       statsMode === 'manual'
-        ? (s.manual_active_circulars || DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars!).trim()
+        ? String(manualCirculars).trim()
         : autoCircularsStr,
     totalApplicationsDisplay:
-      statsMode === 'manual'
-        ? (s.manual_total_applications || DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications!).trim()
-        : autoApplicationsStr,
+      statsMode === 'manual' ? String(manualApps).trim() : autoApplicationsStr,
     trustCard3Value: (
       s.trust_card_3_value ||
       (lang === 'bn' ? '১০০%' : DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value!)
@@ -4607,64 +4641,94 @@ export function mapSiteSettingsRowToSocialSettings(
 
   const pickCmsString = (keys: string[], defaultVal: string): string => {
     for (const key of keys) {
-      if (typeof row[key] === 'string' && (row[key] as string).trim().length > 0) {
-        return (row[key] as string).trim();
+      const val = row[key];
+      if (typeof val === 'string' && val.trim().length > 0) {
+        return val.trim();
       }
-      if (
-        rawDataObj &&
-        typeof rawDataObj[key] === 'string' &&
-        (rawDataObj[key] as string).trim().length > 0
-      ) {
-        return (rawDataObj[key] as string).trim();
+      if (typeof val === 'number' && Number.isFinite(val)) {
+        return String(val);
+      }
+      if (rawDataObj) {
+        const rawVal = rawDataObj[key];
+        if (typeof rawVal === 'string' && rawVal.trim().length > 0) {
+          return rawVal.trim();
+        }
+        if (typeof rawVal === 'number' && Number.isFinite(rawVal)) {
+          return String(rawVal);
+        }
       }
     }
     return defaultVal;
   };
 
   const rawStatsMode = pickCmsString(
-    ['stats_mode', 'statsMode'],
-    fallback.stats_mode || 'auto'
+    ['counter_mode', 'stats_mode', 'statsMode', 'counterMode'],
+    fallback.stats_mode || fallback.counter_mode || 'auto'
   );
   const stats_mode: HomepageStatsMode =
-    rawStatsMode === 'manual' ? 'manual' : 'auto';
+    rawStatsMode.toLowerCase() === 'manual' ? 'manual' : 'auto';
 
   const manual_verified_tutors = pickCmsString(
-    ['manual_verified_tutors', 'manualVerifiedTutors'],
+    [
+      'verified_tutors',
+      'manual_verified_tutors',
+      'manualVerifiedTutors',
+      'verifiedTutors',
+    ],
     fallback.manual_verified_tutors ||
+      fallback.verified_tutors ||
       DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors!
   );
   const manual_online_tutors = pickCmsString(
-    ['manual_online_tutors', 'manualOnlineTutors'],
+    [
+      'online_tutors',
+      'manual_online_tutors',
+      'manualOnlineTutors',
+      'onlineTutors',
+    ],
     fallback.manual_online_tutors ||
+      fallback.online_tutors ||
       DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors!
   );
   const manual_active_circulars = pickCmsString(
-    ['manual_active_circulars', 'manualActiveCirculars'],
+    [
+      'active_circulars',
+      'manual_active_circulars',
+      'manualActiveCirculars',
+      'activeCirculars',
+    ],
     fallback.manual_active_circulars ||
+      fallback.active_circulars ||
       DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars!
   );
   const manual_total_applications = pickCmsString(
-    ['manual_total_applications', 'manualTotalApplications'],
+    [
+      'total_applications',
+      'manual_total_applications',
+      'manualTotalApplications',
+      'totalApplications',
+    ],
     fallback.manual_total_applications ||
+      fallback.total_applications ||
       DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications!
   );
   const trust_card_3_value = pickCmsString(
-    ['trust_card_3_value', 'trustCard3Value'],
+    ['trust_card_3_value', 'badge_3_value', 'trustCard3Value'],
     fallback.trust_card_3_value ||
       DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_value!
   );
   const trust_card_3_label = pickCmsString(
-    ['trust_card_3_label', 'trustCard3Label'],
+    ['trust_card_3_label', 'badge_3_label', 'trustCard3Label'],
     fallback.trust_card_3_label ||
       DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_3_label!
   );
   const trust_card_4_value = pickCmsString(
-    ['trust_card_4_value', 'trustCard4Value'],
+    ['trust_card_4_value', 'badge_4_value', 'trustCard4Value'],
     fallback.trust_card_4_value ||
       DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_value!
   );
   const trust_card_4_label = pickCmsString(
-    ['trust_card_4_label', 'trustCard4Label'],
+    ['trust_card_4_label', 'badge_4_label', 'trustCard4Label'],
     fallback.trust_card_4_label ||
       DEFAULT_SITE_SOCIAL_SETTINGS.trust_card_4_label!
   );
@@ -4711,10 +4775,15 @@ export function mapSiteSettingsRowToSocialSettings(
     nagadNumber,
     verificationFee,
     stats_mode,
+    counter_mode: stats_mode,
     manual_verified_tutors,
+    verified_tutors: manual_verified_tutors,
     manual_online_tutors,
+    online_tutors: manual_online_tutors,
     manual_active_circulars,
+    active_circulars: manual_active_circulars,
     manual_total_applications,
+    total_applications: manual_total_applications,
     trust_card_3_value,
     trust_card_3_label,
     trust_card_4_value,
@@ -4794,6 +4863,55 @@ export function writeSiteSocialSettingsToStorage(
     ...(settings.rawData || {}),
   };
 
+  const resolvedMode: HomepageStatsMode =
+    (settings.stats_mode ??
+      settings.counter_mode ??
+      current.stats_mode ??
+      current.counter_mode ??
+      DEFAULT_SITE_SOCIAL_SETTINGS.stats_mode) === 'manual'
+      ? 'manual'
+      : 'auto';
+
+  const resolvedVerified =
+    settings.manual_verified_tutors !== undefined
+      ? settings.manual_verified_tutors.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors
+      : settings.verified_tutors !== undefined
+      ? settings.verified_tutors.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors
+      : current.manual_verified_tutors ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors;
+
+  const resolvedOnline =
+    settings.manual_online_tutors !== undefined
+      ? settings.manual_online_tutors.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors
+      : settings.online_tutors !== undefined
+      ? settings.online_tutors.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors
+      : current.manual_online_tutors ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors;
+
+  const resolvedCirculars =
+    settings.manual_active_circulars !== undefined
+      ? settings.manual_active_circulars.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars
+      : settings.active_circulars !== undefined
+      ? settings.active_circulars.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars
+      : current.manual_active_circulars ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars;
+
+  const resolvedApps =
+    settings.manual_total_applications !== undefined
+      ? settings.manual_total_applications.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications
+      : settings.total_applications !== undefined
+      ? settings.total_applications.trim() ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications
+      : current.manual_total_applications ||
+        DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications;
+
   const next: SiteSocialSettings = {
     id: 1,
     facebookUrl:
@@ -4816,34 +4934,16 @@ export function writeSiteSocialSettingsToStorage(
       settings.verificationFee !== undefined && Number(settings.verificationFee) > 0
         ? Number(settings.verificationFee)
         : current.verificationFee || DEFAULT_VERIFICATION_FEE_BDT,
-    stats_mode:
-      settings.stats_mode !== undefined
-        ? settings.stats_mode
-        : current.stats_mode || DEFAULT_SITE_SOCIAL_SETTINGS.stats_mode,
-    manual_verified_tutors:
-      settings.manual_verified_tutors !== undefined
-        ? settings.manual_verified_tutors.trim() ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors
-        : current.manual_verified_tutors ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_verified_tutors,
-    manual_online_tutors:
-      settings.manual_online_tutors !== undefined
-        ? settings.manual_online_tutors.trim() ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors
-        : current.manual_online_tutors ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_online_tutors,
-    manual_active_circulars:
-      settings.manual_active_circulars !== undefined
-        ? settings.manual_active_circulars.trim() ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars
-        : current.manual_active_circulars ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_active_circulars,
-    manual_total_applications:
-      settings.manual_total_applications !== undefined
-        ? settings.manual_total_applications.trim() ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications
-        : current.manual_total_applications ||
-          DEFAULT_SITE_SOCIAL_SETTINGS.manual_total_applications,
+    stats_mode: resolvedMode,
+    counter_mode: resolvedMode,
+    manual_verified_tutors: resolvedVerified,
+    verified_tutors: resolvedVerified,
+    manual_online_tutors: resolvedOnline,
+    online_tutors: resolvedOnline,
+    manual_active_circulars: resolvedCirculars,
+    active_circulars: resolvedCirculars,
+    manual_total_applications: resolvedApps,
+    total_applications: resolvedApps,
     trust_card_3_value:
       settings.trust_card_3_value !== undefined
         ? settings.trust_card_3_value.trim() ||
@@ -4942,6 +5042,9 @@ export function writeSiteSocialSettingsToStorage(
 }
 
 export const SITE_SETTINGS_SELECT_COLUMNS =
+  'id,counter_mode,verified_tutors,online_tutors,active_circulars,total_applications,trust_card_3_value,trust_card_3_label,trust_card_4_value,trust_card_4_label,updated_at';
+
+export const SITE_SETTINGS_LEGACY_COLUMNS =
   'id,facebook_url,whatsapp_url,bkash_number,nagad_number,verification_fee,stats_mode,manual_verified_tutors,manual_online_tutors,manual_active_circulars,badge_3_value,badge_3_label,badge_4_value,badge_4_label,hero_top_badge_1,hero_top_badge_2,hero_title,guardian_card_title,guardian_card_badge,tutor_card_title,tutor_card_desc,raw_data,updated_at';
 
 export const SITE_SETTINGS_MINIMAL_COLUMNS = 'id,facebook_url,whatsapp_url,raw_data';
@@ -4953,7 +5056,7 @@ const siteSettingsClientKnownColumns = new WeakMap<object, Set<string>>();
 
 /**
  * Fetches live social, payment & homepage CMS settings from Supabase `public.site_settings` (`id = 1`)
- * using explicit column selection and caches them in `sessionStorage` and `localStorage`.
+ * and syncs them to browser storage so regular users always receive real-time counter values.
  */
 export async function fetchSiteSocialSettingsFromSupabase(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -4973,6 +5076,9 @@ export async function fetchSiteSocialSettingsFromSupabase(
     if (typeof query.maybeSingle === 'function') {
       return query.maybeSingle();
     }
+    if (typeof query.single === 'function') {
+      return query.single();
+    }
     if (typeof query.limit === 'function') {
       const res = await query.limit(1);
       return {
@@ -4987,7 +5093,13 @@ export async function fetchSiteSocialSettingsFromSupabase(
   try {
     let res = await runSiteSettingsQuery(SITE_SETTINGS_SELECT_COLUMNS);
     if (res?.error) {
+      res = await runSiteSettingsQuery(SITE_SETTINGS_LEGACY_COLUMNS);
+    }
+    if (res?.error) {
       res = await runSiteSettingsQuery(SITE_SETTINGS_MINIMAL_COLUMNS);
+    }
+    if (res?.error) {
+      res = await runSiteSettingsQuery('id,facebook_url,whatsapp_url');
     }
     const row =
       !res?.error && res?.data && typeof res.data === 'object'
@@ -5010,8 +5122,8 @@ export async function fetchSiteSocialSettingsFromSupabase(
 }
 
 /**
- * Fetches semi-static `site_settings` from Supabase at most once per browser session,
- * serving cached sessionStorage data on subsequent component mounts or tab switches.
+ * Fetches `site_settings` (`id = 1`) from Supabase. When `forceRefresh` is true,
+ * bypasses sessionStorage cache completely so users receive real-time DB updates immediately.
  */
 export async function fetchSiteSocialSettingsOncePerSession(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -5092,10 +5204,15 @@ export async function saveSiteSocialSettingsToSupabase(
 
   const hasExplicitHomepageCmsSettings =
     input.stats_mode !== undefined ||
+    input.counter_mode !== undefined ||
     input.manual_verified_tutors !== undefined ||
+    input.verified_tutors !== undefined ||
     input.manual_online_tutors !== undefined ||
+    input.online_tutors !== undefined ||
     input.manual_active_circulars !== undefined ||
+    input.active_circulars !== undefined ||
     input.manual_total_applications !== undefined ||
+    input.total_applications !== undefined ||
     input.trust_card_3_value !== undefined ||
     input.trust_card_3_label !== undefined ||
     input.trust_card_4_value !== undefined ||
@@ -5112,6 +5229,9 @@ export async function saveSiteSocialSettingsToSupabase(
     const knownCols = siteSettingsClientKnownColumns.get(
       supabaseClient as object
     );
+    const isLiveCounterModeSchema = Boolean(
+      knownCols && knownCols.has('counter_mode') && !knownCols.has('facebook_url')
+    );
     const supportsPaymentCols =
       !knownCols ||
       (knownCols.has('bkash_number') &&
@@ -5121,6 +5241,20 @@ export async function saveSiteSocialSettingsToSupabase(
     const supportsHomepageCmsCols =
       !knownCols ||
       (knownCols.has('stats_mode') && knownCols.has('hero_title'));
+
+    const liveCounterSchemaPayload: Record<string, unknown> = {
+      id: 1,
+      counter_mode: savedLocal.stats_mode || 'auto',
+      verified_tutors: savedLocal.manual_verified_tutors,
+      online_tutors: savedLocal.manual_online_tutors,
+      active_circulars: savedLocal.manual_active_circulars,
+      total_applications: savedLocal.manual_total_applications,
+      trust_card_3_value: savedLocal.trust_card_3_value,
+      trust_card_3_label: savedLocal.trust_card_3_label,
+      trust_card_4_value: savedLocal.trust_card_4_value,
+      trust_card_4_label: savedLocal.trust_card_4_label,
+      updated_at: updatedAt,
+    };
 
     const cmsMetadataPayload: Record<string, unknown> = {
       stats_mode: savedLocal.stats_mode || 'auto',
@@ -5147,7 +5281,11 @@ export async function saveSiteSocialSettingsToSupabase(
 
     const candidatePayloads: Record<string, unknown>[] = [];
 
-    if (hasExplicitHomepageCmsSettings && supportsHomepageCmsCols) {
+    if (isLiveCounterModeSchema) {
+      candidatePayloads.push(liveCounterSchemaPayload);
+    }
+
+    if (hasExplicitHomepageCmsSettings && supportsHomepageCmsCols && !isLiveCounterModeSchema) {
       if (!knownCols || knownCols.has('manual_total_applications')) {
         candidatePayloads.push({
           id: 1,
@@ -5188,7 +5326,8 @@ export async function saveSiteSocialSettingsToSupabase(
       });
     }
 
-    if (hasExplicitHomepageCmsSettings) {
+    if (hasExplicitHomepageCmsSettings && !isLiveCounterModeSchema) {
+      candidatePayloads.push(liveCounterSchemaPayload);
       if (!knownCols || knownCols.has('raw_data')) {
         candidatePayloads.push({
           id: 1,
@@ -5227,7 +5366,7 @@ export async function saveSiteSocialSettingsToSupabase(
       });
     }
 
-    if (hasExplicitPaymentSettings && supportsPaymentCols) {
+    if (hasExplicitPaymentSettings && supportsPaymentCols && !isLiveCounterModeSchema) {
       candidatePayloads.push({
         id: 1,
         facebook_url: savedLocal.facebookUrl,
@@ -5240,24 +5379,27 @@ export async function saveSiteSocialSettingsToSupabase(
       });
     }
 
-    candidatePayloads.push(
-      {
-        id: 1,
-        facebook_url: savedLocal.facebookUrl,
-        whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
-        updated_at: updatedAt,
-      },
-      {
-        id: 1,
-        facebook_url: savedLocal.facebookUrl,
-        whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
-      },
-      {
-        id: 1,
-        facebook_url: savedLocal.facebookUrl,
-        whatsapp_number: savedLocal.whatsappContact,
-      }
-    );
+    if (!isLiveCounterModeSchema) {
+      candidatePayloads.push(
+        {
+          id: 1,
+          facebook_url: savedLocal.facebookUrl,
+          whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+          updated_at: updatedAt,
+        },
+        {
+          id: 1,
+          facebook_url: savedLocal.facebookUrl,
+          whatsapp_url: formatWhatsAppDirectLink(savedLocal.whatsappContact),
+        },
+        {
+          id: 1,
+          facebook_url: savedLocal.facebookUrl,
+          whatsapp_number: savedLocal.whatsappContact,
+        },
+        liveCounterSchemaPayload
+      );
+    }
 
     for (const payload of candidatePayloads) {
       try {

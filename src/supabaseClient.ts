@@ -43,7 +43,7 @@ const customFetch: typeof fetch = async (input, init) => {
       ? input.toString()
       : input.url;
 
-  // Ensure PostgREST (/rest/v1/) and Storage (/storage/v1/) calls pass the valid apikey and retry with publishable key if a stale JWT causes 401/403
+  // Ensure PostgREST (/rest/v1/) and Storage (/storage/v1/) calls pass the valid apikey, bypass stale cache, and retry with publishable key if a stale JWT causes 401/403
   if (urlStr.includes('/rest/v1/') || urlStr.includes('/storage/v1/')) {
     const headers = new Headers(init?.headers || {});
     headers.set('apikey', normalizedSupabaseKey);
@@ -51,10 +51,16 @@ const customFetch: typeof fetch = async (input, init) => {
       headers.set('Authorization', `Bearer ${normalizedSupabaseKey}`);
     }
 
-    const res = await fetch(input, { ...init, headers });
+    const fetchOptions: RequestInit = {
+      ...init,
+      headers,
+      cache: 'no-store',
+    };
+
+    const res = await fetch(input, fetchOptions);
     if (res.status === 401 || res.status === 403) {
       headers.set('Authorization', `Bearer ${normalizedSupabaseKey}`);
-      return fetch(input, { ...init, headers });
+      return fetch(input, { ...fetchOptions, headers });
     }
     return res;
   }

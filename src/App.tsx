@@ -4,6 +4,10 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import {
   INITIAL_TUITION_JOBS,
   INITIAL_TUTORS,
@@ -414,7 +418,7 @@ export default function App() {
     'refund'
   );
 
-  const refreshSiteSocialSettings = useCallback(async (forceRefresh = false) => {
+  const refreshSiteSocialSettings = useCallback(async (forceRefresh = true) => {
     const latest = await fetchSiteSocialSettingsOncePerSession(
       supabase,
       forceRefresh
@@ -1512,10 +1516,10 @@ export default function App() {
     [fetchMyTutorProfile]
   );
 
-  // Fetch live data on initial mount (with once-per-session caching for site_settings & site_notices and zero idle WebSocket channels)
+  // Fetch live data on initial mount (always force-refreshing site_settings id = 1 to bypass stale cache)
   useEffect(() => {
     void fetchLiveCirculars();
-    void refreshSiteSocialSettings(false);
+    void refreshSiteSocialSettings(true);
     void refreshPaymentRequests();
     void refreshSiteNotices(false);
     void refreshGuardianRequests();
@@ -1545,7 +1549,7 @@ export default function App() {
     refreshSiteSocialSettings,
   ]);
 
-  // When switching between Dashboard ('tutors'), Tuition Circulars ('job_board'), or Tutor Board ('tutor_board'), use the 2-minute sessionStorage cache before hitting Supabase
+  // When switching between Dashboard ('tutors'), Tuition Circulars ('job_board'), or Tutor Board ('tutor_board'), pull fresh site_settings (id = 1)
   useEffect(() => {
     if (
       activeDesk === 'job_board' ||
@@ -1553,8 +1557,9 @@ export default function App() {
       activeDesk === 'tutor_board'
     ) {
       void fetchLiveCirculars(false);
+      void refreshSiteSocialSettings(true);
     }
-  }, [activeDesk, fetchLiveCirculars]);
+  }, [activeDesk, fetchLiveCirculars, refreshSiteSocialSettings]);
 
   // Lazy-load NID and Student ID scans ONLY when Admin opens Admin Verification Desk or Applicant Review modal
   useEffect(() => {
@@ -3121,6 +3126,7 @@ export default function App() {
                 jobs.filter((j) => (j.status || 'Active') === 'Active').length ||
                 jobs.length
               }
+              totalApplicationsCount={circularApplications.length}
               siteSocialSettings={siteSocialSettings}
             />
 
