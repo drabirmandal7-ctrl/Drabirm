@@ -1695,8 +1695,121 @@ export function getTutorAccountRestrictionDetails(
   };
 }
 
+export const UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE =
+  'Please verify your profile (NID/Student ID) to apply for this tuition.';
+
+/**
+ * Checks whether a tutor profile row is verified (`status` is 'Approved'/'verified' or `is_verified` is true).
+ */
+export function isTutorProfileVerifiedForApplication(
+  profile?: VerificationRequest | Record<string, unknown> | null
+): boolean {
+  if (!profile || typeof profile !== 'object') return false;
+  const raw = profile as Record<string, unknown>;
+  if (raw.is_verified === true || raw.isVerified === true) {
+    return true;
+  }
+  const statusStr = String(raw.status || '')
+    .trim()
+    .toLowerCase();
+  return statusStr === 'approved' || statusStr === 'verified';
+}
+
+/**
+ * Backend / pre-insert database guard: queries Supabase (`tutors` and `tutor_verifications`)
+ * to verify the user's live verification status before allowing an insert into `applications` / `circular_applications`.
+ */
+export async function verifyTutorStatusInDatabaseBeforeApply(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any,
+  user?: UserAccount | null,
+  fallbackProfile?: VerificationRequest | null
+): Promise<{
+  verified: boolean;
+  error?: string;
+}> {
+  if (isAuthorizedAdminAccount(user)) {
+    return { verified: true };
+  }
+
+  const email = (
+    user?.email ||
+    fallbackProfile?.userEmail ||
+    fallbackProfile?.email ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+  const userId = (user?.id || '').trim();
+
+  if (!supabaseClient || typeof supabaseClient.from !== 'function') {
+    const localOk = isTutorProfileVerifiedForApplication(fallbackProfile);
+    return localOk
+      ? { verified: true }
+      : { verified: false, error: UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE };
+  }
+
+  const checkTable = async (tableName: string): Promise<boolean | null> => {
+    try {
+      if (userId) {
+        const byId = await supabaseClient
+          .from(tableName)
+          .select('id, status, user_id, user_email')
+          .eq('user_id', userId)
+          .limit(5);
+        if (!byId?.error && Array.isArray(byId?.data) && byId.data.length > 0) {
+          return byId.data.some((row: Record<string, unknown>) =>
+            isTutorProfileVerifiedForApplication(row)
+          );
+        }
+      }
+      if (email) {
+        const byEmail = await supabaseClient
+          .from(tableName)
+          .select('id, status, user_email')
+          .ilike('user_email', email)
+          .limit(5);
+        if (
+          !byEmail?.error &&
+          Array.isArray(byEmail?.data) &&
+          byEmail.data.length > 0
+        ) {
+          return byEmail.data.some((row: Record<string, unknown>) =>
+            isTutorProfileVerifiedForApplication(row)
+          );
+        }
+      }
+    } catch {
+      // Ignore schema differences
+    }
+    return null;
+  };
+
+  const [verificationsCheck, tutorsCheck] = await Promise.all([
+    checkTable('tutor_verifications'),
+    checkTable('tutors'),
+  ]);
+
+  if (verificationsCheck === true || tutorsCheck === true) {
+    return { verified: true };
+  }
+  if (verificationsCheck === false || tutorsCheck === false) {
+    return { verified: false, error: UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE };
+  }
+
+  if (isTutorProfileVerifiedForApplication(fallbackProfile)) {
+    return { verified: true };
+  }
+
+  return {
+    verified: false,
+    error: UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE,
+  };
+}
+
 export type CircularCardApplyButtonStateType =
   | 'restricted'
+  | 'unverified'
   | 'pending'
   | 'confirmed'
   | 'media_fee'
@@ -1707,6 +1820,7 @@ export function getCircularCardApplyButtonState(
   application?: CircularApplicationRow | null,
   options?: {
     isTutorRestricted?: boolean;
+    isProfileVerified?: boolean;
     isPaymentApproved?: boolean;
     lang?: Language;
   }
@@ -1770,6 +1884,17 @@ export function getCircularCardApplyButtonState(
       state: 'restricted',
       label:
         lang === 'en' ? '🔒 Account Restricted' : '🔒 অ্যাকাউন্ট সীমাবদ্ধ',
+      interactive: false,
+    };
+  }
+
+  if (options?.isProfileVerified === false) {
+    return {
+      state: 'unverified',
+      label:
+        lang === 'en'
+          ? '🔒 Apply Now (Verify Profile)'
+          : '🔒 আবেদন করুন (ভেরিফাই প্রয়োজন)',
       interactive: false,
     };
   }
@@ -4665,11 +4790,15 @@ export function mapSiteSettingsRowToSocialSettings(
     ['counter_mode', 'stats_mode', 'statsMode', 'counterMode'],
     fallback.stats_mode || fallback.counter_mode || 'auto'
   );
-  const stats_mode: HomepageStatsMode =
-    rawStatsMode.toLowerCase() === 'manual' ? 'manual' : 'auto';
+  const stats_mode: HomepageStatsMode = rawStatsMode
+    .toLowerCase()
+    .startsWith('manual')
+    ? 'manual'
+    : 'auto';
 
   const manual_verified_tutors = pickCmsString(
     [
+      'verified_tutors_count',
       'verified_tutors',
       'manual_verified_tutors',
       'manualVerifiedTutors',
@@ -4681,6 +4810,7 @@ export function mapSiteSettingsRowToSocialSettings(
   );
   const manual_online_tutors = pickCmsString(
     [
+      'online_tutors_count',
       'online_tutors',
       'manual_online_tutors',
       'manualOnlineTutors',
@@ -4692,6 +4822,7 @@ export function mapSiteSettingsRowToSocialSettings(
   );
   const manual_active_circulars = pickCmsString(
     [
+      'circulars_count',
       'active_circulars',
       'manual_active_circulars',
       'manualActiveCirculars',
@@ -5042,6 +5173,9 @@ export function writeSiteSocialSettingsToStorage(
 }
 
 export const SITE_SETTINGS_SELECT_COLUMNS =
+  'id,facebook_url,whatsapp_number,bkash_number,nagad_number,verification_fee,counter_mode,circulars_count,total_applications,verified_tutors_count,online_tutors_count,updated_at';
+
+export const SITE_SETTINGS_COUNTER_COLUMNS =
   'id,counter_mode,verified_tutors,online_tutors,active_circulars,total_applications,trust_card_3_value,trust_card_3_label,trust_card_4_value,trust_card_4_label,updated_at';
 
 export const SITE_SETTINGS_LEGACY_COLUMNS =
@@ -5053,6 +5187,89 @@ export const SITE_SETTINGS_SESSION_FETCHED_KEY =
   'tutorzone_site_settings_fetched_once_v1';
 
 const siteSettingsClientKnownColumns = new WeakMap<object, Set<string>>();
+
+export interface AutomaticHomepageCounts {
+  verifiedTutorsCount: number;
+  onlineTutorsCount: number;
+  activeCircularsCount: number;
+  totalApplicationsCount: number;
+}
+
+/**
+ * Dynamically counts verified tutors, online tutors, active tuition circulars, and applications
+ * directly in Supabase using `{ count: 'exact', head: true }` so zero row data is downloaded.
+ */
+export async function fetchAutomaticHomepageCountsFromSupabase(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseClient: any
+): Promise<AutomaticHomepageCounts | null> {
+  if (!supabaseClient || typeof supabaseClient.from !== 'function') {
+    return null;
+  }
+
+  const runHeadCount = async (
+    table: string,
+    statusValues?: string[]
+  ): Promise<number | null> => {
+    try {
+      let query = supabaseClient
+        .from(table)
+        .select('*', { count: 'exact', head: true });
+      if (statusValues && statusValues.length > 0 && typeof query.in === 'function') {
+        query = query.in('status', statusValues);
+      }
+      const res = await query;
+      if (!res?.error && typeof res?.count === 'number') {
+        return res.count;
+      }
+    } catch {
+      // Table may not exist in all schemas
+    }
+    return null;
+  };
+
+  try {
+    const [
+      tutorsVerifiedCount,
+      verificationsApprovedCount,
+      tuitionCircularsActiveCount,
+      circularsActiveCount,
+      tuitionJobsActiveCount,
+      applicationsCount,
+    ] = await Promise.all([
+      runHeadCount('tutors', ['verified', 'Verified', 'approved', 'Approved']),
+      runHeadCount('tutor_verifications', [
+        'Approved',
+        'approved',
+        'verified',
+        'Verified',
+      ]),
+      runHeadCount('tuition_circulars', ['Active', 'active']),
+      runHeadCount('circulars', ['active', 'Active']),
+      runHeadCount('tuition_jobs', ['active', 'Active']),
+      runHeadCount('circular_applications'),
+    ]);
+
+    const verifiedTutorsCount = Math.max(
+      tutorsVerifiedCount ?? 0,
+      verificationsApprovedCount ?? 0
+    );
+    const activeCircularsCount = Math.max(
+      tuitionCircularsActiveCount ?? 0,
+      circularsActiveCount ?? 0,
+      tuitionJobsActiveCount ?? 0
+    );
+
+    return {
+      verifiedTutorsCount,
+      onlineTutorsCount: verifiedTutorsCount,
+      activeCircularsCount,
+      totalApplicationsCount: applicationsCount ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Fetches live social, payment & homepage CMS settings from Supabase `public.site_settings` (`id = 1`)
@@ -5093,10 +5310,16 @@ export async function fetchSiteSocialSettingsFromSupabase(
   try {
     let res = await runSiteSettingsQuery(SITE_SETTINGS_SELECT_COLUMNS);
     if (res?.error) {
+      res = await runSiteSettingsQuery(SITE_SETTINGS_COUNTER_COLUMNS);
+    }
+    if (res?.error) {
       res = await runSiteSettingsQuery(SITE_SETTINGS_LEGACY_COLUMNS);
     }
     if (res?.error) {
       res = await runSiteSettingsQuery(SITE_SETTINGS_MINIMAL_COLUMNS);
+    }
+    if (res?.error) {
+      res = await runSiteSettingsQuery('id,facebook_url,whatsapp_number');
     }
     if (res?.error) {
       res = await runSiteSettingsQuery('id,facebook_url,whatsapp_url');
@@ -5280,6 +5503,30 @@ export async function saveSiteSocialSettingsToSupabase(
     )}`;
 
     const candidatePayloads: Record<string, unknown>[] = [];
+
+    if (knownCols && knownCols.has('verified_tutors_count')) {
+      candidatePayloads.push({
+        id: 1,
+        facebook_url: hasExplicitHomepageCmsSettings
+          ? facebookWithCmsFragment
+          : savedLocal.facebookUrl,
+        whatsapp_number: savedLocal.whatsappContact,
+        bkash_number: savedLocal.bkashNumber || DEFAULT_BKASH_NUMBER,
+        nagad_number: savedLocal.nagadNumber || DEFAULT_NAGAD_NUMBER,
+        verification_fee: String(
+          savedLocal.verificationFee || DEFAULT_VERIFICATION_FEE_BDT
+        ),
+        counter_mode:
+          savedLocal.stats_mode === 'manual'
+            ? 'Manual (Custom Digits)'
+            : 'Automatic (Live DB)',
+        circulars_count: savedLocal.manual_active_circulars,
+        total_applications: savedLocal.manual_total_applications,
+        verified_tutors_count: savedLocal.manual_verified_tutors,
+        online_tutors_count: savedLocal.manual_online_tutors,
+        updated_at: updatedAt,
+      });
+    }
 
     if (isLiveCounterModeSchema) {
       candidatePayloads.push(liveCounterSchemaPayload);
@@ -7617,5 +7864,235 @@ export function invalidateLiveSessionCacheInStorage(
     // Ignore storage errors
   }
 }
+
+export const PASSWORD_RESET_SUCCESS_MESSAGE =
+  'Password reset link sent! Please check your email inbox (and spam folder) to reset your password.';
+
+export function validatePasswordResetEmail(email: string): {
+  valid: boolean;
+  trimmedEmail: string;
+  error?: string;
+} {
+  const trimmedEmail = (email || '').trim();
+  if (!trimmedEmail) {
+    return {
+      valid: false,
+      trimmedEmail,
+      error: 'Please enter the email address associated with your account.',
+    };
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmedEmail)) {
+    return {
+      valid: false,
+      trimmedEmail,
+      error: 'Please enter a valid email address (e.g., name@example.com).',
+    };
+  }
+  return { valid: true, trimmedEmail };
+}
+
+export interface SupabaseAuthResetLike {
+  auth: {
+    resetPasswordForEmail: (
+      email: string,
+      options?: { redirectTo?: string }
+    ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+}
+
+export async function sendPasswordResetEmailViaSupabase(
+  supabaseClient: SupabaseAuthResetLike | null | undefined,
+  email: string,
+  redirectToUrl?: string
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const validation = validatePasswordResetEmail(email);
+  if (!validation.valid) {
+    return {
+      success: false,
+      message: validation.error || 'Please enter a valid email address.',
+    };
+  }
+
+  if (!supabaseClient?.auth?.resetPasswordForEmail) {
+    return {
+      success: false,
+      message: 'Authentication service is temporarily unavailable.',
+    };
+  }
+
+  try {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(
+      validation.trimmedEmail,
+      redirectToUrl ? { redirectTo: redirectToUrl } : undefined
+    );
+
+    if (error) {
+      return {
+        success: false,
+        message:
+          error.message ||
+          'Unable to send password reset link. Please try again.',
+      };
+    }
+
+    return {
+      success: true,
+      message: PASSWORD_RESET_SUCCESS_MESSAGE,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error
+          ? err.message
+          : 'Network error while sending reset link. Please try again.',
+    };
+  }
+}
+
+export const PASSWORD_UPDATE_SUCCESS_MESSAGE =
+  'Your password has been updated successfully! Redirecting to login...';
+
+export function validateUpdatePasswordInput(
+  newPassword: string,
+  confirmPassword: string
+): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!newPassword || newPassword.length < 6) {
+    return {
+      valid: false,
+      error: 'New password must be at least 6 characters long.',
+    };
+  }
+
+  if (!confirmPassword) {
+    return {
+      valid: false,
+      error: 'Please confirm your new password.',
+    };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return {
+      valid: false,
+      error: 'Passwords do not match. Please make sure both fields are identical.',
+    };
+  }
+
+  return { valid: true };
+}
+
+export interface SupabaseAuthUpdateUserLike {
+  auth: {
+    updateUser: (attributes: {
+      password: string;
+    }) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+}
+
+export async function updateUserPasswordViaSupabase(
+  supabaseClient: SupabaseAuthUpdateUserLike | null | undefined,
+  newPassword: string,
+  confirmPassword: string
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const validation = validateUpdatePasswordInput(newPassword, confirmPassword);
+  if (!validation.valid) {
+    return {
+      success: false,
+      message: validation.error || 'Please check your new password.',
+    };
+  }
+
+  if (!supabaseClient?.auth?.updateUser) {
+    return {
+      success: false,
+      message: 'Authentication service is temporarily unavailable.',
+    };
+  }
+
+  try {
+    const { error } = await supabaseClient.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        message:
+          error.message ||
+          'Unable to update your password. Your reset link may have expired.',
+      };
+    }
+
+    return {
+      success: true,
+      message: PASSWORD_UPDATE_SUCCESS_MESSAGE,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error
+          ? err.message
+          : 'Network error while updating password. Please try again.',
+    };
+  }
+}
+
+export const LOGIN_SUCCESS_TOAST_MESSAGE =
+  'Signed in successfully! Redirecting to your dashboard...';
+
+export function resolveAuthMiddlewareRedirect(
+  pathname: string,
+  isAuthenticated: boolean
+): {
+  shouldRedirect: boolean;
+  destination: '/dashboard' | '/login' | null;
+} {
+  const cleanPath = (pathname || '/').trim() || '/';
+
+  const isAuthPage =
+    cleanPath === '/login' ||
+    cleanPath.startsWith('/login/') ||
+    cleanPath === '/signup' ||
+    cleanPath.startsWith('/signup/');
+
+  const isProtectedPage =
+    cleanPath === '/dashboard' ||
+    cleanPath.startsWith('/dashboard/') ||
+    cleanPath === '/profile' ||
+    cleanPath.startsWith('/profile/');
+
+  if (isAuthenticated && isAuthPage) {
+    return {
+      shouldRedirect: true,
+      destination: '/dashboard',
+    };
+  }
+
+  if (!isAuthenticated && isProtectedPage) {
+    return {
+      shouldRedirect: true,
+      destination: '/login',
+    };
+  }
+
+  return {
+    shouldRedirect: false,
+    destination: null,
+  };
+}
+
+
+
 
 

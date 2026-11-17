@@ -1,6 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Language } from '../types/madaripur';
-import { formatWhatsAppDirectLink } from '../utils/tutorEngine';
+import {
+  fetchSiteSocialSettingsFromSupabase,
+  formatWhatsAppDirectLink,
+  readSiteSocialSettingsFromStorage,
+} from '../utils/tutorEngine';
+import { supabase } from '../supabaseClient';
 
 export const OFFICIAL_WHATSAPP_SUPPORT_NUMBER = '8801715380022';
 export const OFFICIAL_WHATSAPP_SUPPORT_MESSAGE =
@@ -18,14 +23,47 @@ export function buildOfficialWhatsAppSupportUrl(
 interface FloatingWhatsAppButtonProps {
   lang?: Language;
   whatsappContact?: string;
+  whatsapp_number?: string;
 }
 
 export const FloatingWhatsAppButton: React.FC<FloatingWhatsAppButtonProps> = ({
   lang = 'en',
-  whatsappContact = OFFICIAL_WHATSAPP_SUPPORT_NUMBER,
+  whatsappContact,
+  whatsapp_number,
 }) => {
+  const incomingWhatsappProp = whatsapp_number || whatsappContact;
+  const [liveWhatsappContact, setLiveWhatsappContact] = useState<string>(
+    () =>
+      incomingWhatsappProp ||
+      readSiteSocialSettingsFromStorage().whatsappContact ||
+      OFFICIAL_WHATSAPP_SUPPORT_NUMBER
+  );
+
+  useEffect(() => {
+    if (incomingWhatsappProp && incomingWhatsappProp.trim()) {
+      setLiveWhatsappContact(incomingWhatsappProp.trim());
+      return;
+    }
+    let mounted = true;
+    fetchSiteSocialSettingsFromSupabase(supabase)
+      .then((settings) => {
+        if (mounted && settings?.whatsappContact) {
+          setLiveWhatsappContact(settings.whatsappContact);
+        }
+      })
+      .catch(() => {
+        // Ignore network errors and keep fallback
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [incomingWhatsappProp]);
+
+  const effectiveWhatsapp =
+    (incomingWhatsappProp && incomingWhatsappProp.trim()) || liveWhatsappContact;
+
   const directWhatsappUrl = buildOfficialWhatsAppSupportUrl(
-    whatsappContact,
+    effectiveWhatsapp,
     OFFICIAL_WHATSAPP_SUPPORT_MESSAGE
   );
 

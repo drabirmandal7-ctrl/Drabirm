@@ -19,6 +19,7 @@ import {
   ADMIN_REJECTION_QUICK_REASONS,
   CircularApplicationInput,
   DUPLICATE_CIRCULAR_APPLICATION_MESSAGE,
+  UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE,
   UserAccount,
   extractAdminNoteFromApplication,
   extractMediaFeeFromApplication,
@@ -26,7 +27,9 @@ import {
   formatBDT,
   getCleanApplicantExperienceNote,
   hasTutorAlreadyAppliedToCircular,
+  isAuthorizedAdminAccount,
   isTutorAccountRestricted,
+  isTutorProfileVerifiedForApplication,
   toBanglaNumber,
   validateCircularApplicationInput,
   validatePhoneBD,
@@ -913,6 +916,9 @@ export const ApplyJobModal: React.FC<ApplyJobModalProps> = ({
   if (!job) return null;
 
   const isRestricted = isTutorAccountRestricted(myTutorProfile);
+  const isVerifiedTutor =
+    isAuthorizedAdminAccount(currentUser) ||
+    isTutorProfileVerifiedForApplication(myTutorProfile);
   const existingUserApp = hasTutorAlreadyAppliedToCircular(
     applications,
     job.id,
@@ -941,6 +947,11 @@ export const ApplyJobModal: React.FC<ApplyJobModalProps> = ({
           ? 'Your account is currently restricted from applying to circulars. Please contact Admin for re-verification.'
           : 'আপনার অ্যাকাউন্টে বর্তমানে আবেদনের সীমাবদ্ধতা রয়েছে।'
       );
+      return;
+    }
+
+    if (!isVerifiedTutor) {
+      setErrorMsg(UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE);
       return;
     }
 

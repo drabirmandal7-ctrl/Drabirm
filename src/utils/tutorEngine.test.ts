@@ -4,7 +4,14 @@ import {
   ADMIN_EMAIL,
   DEFAULT_ADMIN_PIN,
   EMAIL_CONFIRMATION_MESSAGE,
+  PASSWORD_RESET_SUCCESS_MESSAGE,
+  PASSWORD_UPDATE_SUCCESS_MESSAGE,
   addReviewToTutor,
+  resolveAuthMiddlewareRedirect,
+  sendPasswordResetEmailViaSupabase,
+  updateUserPasswordViaSupabase,
+  validatePasswordResetEmail,
+  validateUpdatePasswordInput,
   buildCircularApplicationRow,
   calculateAverageRating,
   canAccessDesk,
@@ -4522,5 +4529,131 @@ test('Supabase Free-Tier Optimization: explicit column projections, memoized dro
     }
   }
 });
+
+test('Forgot Password flow: validates email and invokes supabase.auth.resetPasswordForEmail with redirectTo', async () => {
+  assert.equal(validatePasswordResetEmail('').valid, false);
+  assert.equal(validatePasswordResetEmail('invalid-email').valid, false);
+  assert.deepEqual(validatePasswordResetEmail('  tutor@tutorzonebd.com  '), {
+    valid: true,
+    trimmedEmail: 'tutor@tutorzonebd.com',
+  });
+
+  let capturedEmail = '';
+  let capturedRedirect: string | undefined;
+
+  const mockSupabaseSuccess = {
+    auth: {
+      resetPasswordForEmail: async (
+        email: string,
+        options?: { redirectTo?: string }
+      ) => {
+        capturedEmail = email;
+        capturedRedirect = options?.redirectTo;
+        return { data: {}, error: null };
+      },
+    },
+  };
+
+  const successRes = await sendPasswordResetEmailViaSupabase(
+    mockSupabaseSuccess,
+    '  tutor@tutorzonebd.com ',
+    'https://tutorzonebd.com/reset-password'
+  );
+  assert.equal(successRes.success, true);
+  assert.equal(successRes.message, PASSWORD_RESET_SUCCESS_MESSAGE);
+  assert.equal(capturedEmail, 'tutor@tutorzonebd.com');
+  assert.equal(capturedRedirect, 'https://tutorzonebd.com/reset-password');
+
+  const mockSupabaseError = {
+    auth: {
+      resetPasswordForEmail: async () => ({
+        data: null,
+        error: { message: 'Email rate limit exceeded' },
+      }),
+    },
+  };
+
+  const errorRes = await sendPasswordResetEmailViaSupabase(
+    mockSupabaseError,
+    'tutor@tutorzonebd.com'
+  );
+  assert.equal(errorRes.success, false);
+  assert.equal(errorRes.message, 'Email rate limit exceeded');
+});
+
+test('Update Password flow: validates password match & length and invokes supabase.auth.updateUser({ password })', async () => {
+  assert.equal(validateUpdatePasswordInput('123', '123').valid, false);
+  assert.equal(validateUpdatePasswordInput('secret123', '').valid, false);
+  assert.equal(
+    validateUpdatePasswordInput('secret123', 'different123').valid,
+    false
+  );
+  assert.equal(
+    validateUpdatePasswordInput('secret123', 'secret123').valid,
+    true
+  );
+
+  let updatedPass = '';
+  const mockSupabaseSuccess = {
+    auth: {
+      updateUser: async (attrs: { password: string }) => {
+        updatedPass = attrs.password;
+        return { data: { user: { id: 'u1' } }, error: null };
+      },
+    },
+  };
+
+  const mismatchRes = await updateUserPasswordViaSupabase(
+    mockSupabaseSuccess,
+    'secret123',
+    'mismatch123'
+  );
+  assert.equal(mismatchRes.success, false);
+  assert.equal(updatedPass, '');
+
+  const okRes = await updateUserPasswordViaSupabase(
+    mockSupabaseSuccess,
+    'StrongPass#2026',
+    'StrongPass#2026'
+  );
+  assert.equal(okRes.success, true);
+  assert.equal(okRes.message, PASSWORD_UPDATE_SUCCESS_MESSAGE);
+  assert.equal(updatedPass, 'StrongPass#2026');
+});
+
+test('resolveAuthMiddlewareRedirect: redirects authenticated users away from /login & /signup to /dashboard and unauthenticated users away from /dashboard & /profile to /login', () => {
+  assert.deepEqual(resolveAuthMiddlewareRedirect('/login', true), {
+    shouldRedirect: true,
+    destination: '/dashboard',
+  });
+  assert.deepEqual(resolveAuthMiddlewareRedirect('/signup', true), {
+    shouldRedirect: true,
+    destination: '/dashboard',
+  });
+  assert.deepEqual(resolveAuthMiddlewareRedirect('/dashboard', true), {
+    shouldRedirect: false,
+    destination: null,
+  });
+  assert.deepEqual(resolveAuthMiddlewareRedirect('/profile', true), {
+    shouldRedirect: false,
+    destination: null,
+  });
+
+  assert.deepEqual(resolveAuthMiddlewareRedirect('/dashboard', false), {
+    shouldRedirect: true,
+    destination: '/login',
+  });
+  assert.deepEqual(resolveAuthMiddlewareRedirect('/profile', false), {
+    shouldRedirect: true,
+    destination: '/login',
+  });
+  assert.deepEqual(resolveAuthMiddlewareRedirect('/login', false), {
+    shouldRedirect: false,
+    destination: null,
+  });
+});
+
+
+
 
 

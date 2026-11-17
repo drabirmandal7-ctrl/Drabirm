@@ -90,7 +90,11 @@ export const BentoHero: React.FC<BentoHeroProps> = ({
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const liveCms = resolveHomepageLiveStats(
-    siteSocialSettings,
+    {
+      ...(siteSocialSettings || {}),
+      stats_mode: 'auto',
+      counter_mode: 'auto',
+    },
     {
       verifiedTutorsCount,
       onlineTutorsCount,

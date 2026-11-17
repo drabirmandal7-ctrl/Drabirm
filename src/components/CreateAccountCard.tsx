@@ -7,26 +7,40 @@ import {
   CheckCircle2,
   LogOut,
   ArrowRight,
+  ArrowLeft,
+  KeyRound,
+  ShieldCheck,
+  Eye,
+  EyeOff,
   Loader2,
   AlertCircle,
 } from 'lucide-react';
 import {
   ADMIN_REMOVED_PROFILE_NOTICE,
   EMAIL_CONFIRMATION_MESSAGE,
+  LOGIN_SUCCESS_TOAST_MESSAGE,
   UserAccount,
   evaluateSignUpOutcome,
   isAdminEmail,
   markExplicitLoginIntent,
   markSignUpFlowInProgress,
+  sendPasswordResetEmailViaSupabase,
+  updateUserPasswordViaSupabase,
   validateAccountInput,
   verifyAdminPin,
 } from '../utils/tutorEngine';
 import { supabase } from '../supabaseClient';
 
+export type AuthViewMode =
+  | 'signup'
+  | 'signin'
+  | 'forgot_password'
+  | 'update_password';
+
 interface CreateAccountCardProps {
   currentUser: UserAccount | null;
-  authMode?: 'signup' | 'signin';
-  onAuthModeChange?: (mode: 'signup' | 'signin') => void;
+  authMode?: AuthViewMode;
+  onAuthModeChange?: (mode: AuthViewMode) => void;
   authGuardNotice?: string | null;
   onAuthenticated: (user: UserAccount) => void;
   onSignOut: () => void;
@@ -42,10 +56,14 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
   onSignOut,
   onContinueToApp,
 }) => {
-  const [mode, setMode] = useState<'signup' | 'signin'>(authMode);
+  const [mode, setMode] = useState<AuthViewMode>(authMode);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -56,9 +74,9 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
     setMode(authMode);
   }, [authMode]);
 
-  const redirectToHome = () => {
+  const redirectToHome = (path: string = '/dashboard') => {
     try {
-      window.history.pushState({}, '', '/');
+      window.history.pushState({}, '', path);
     } catch {
       // Ignore history API restrictions in sandboxed iframes
     }
@@ -66,7 +84,7 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
   };
 
   const handleSwitchMode = (
-    targetMode: 'signup' | 'signin',
+    targetMode: AuthViewMode,
     options?: { preserveInfo?: boolean; prefillEmail?: string }
   ) => {
     setMode(targetMode);
@@ -80,17 +98,97 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
       setEmail(options.prefillEmail);
     }
     try {
-      window.history.replaceState(
-        {},
-        '',
-        targetMode === 'signin' ? '/login' : '/signup'
-      );
+      const targetPath =
+        targetMode === 'signin'
+          ? '/login'
+          : targetMode === 'forgot_password'
+          ? '/forgot-password'
+          : targetMode === 'update_password'
+          ? '/update-password'
+          : '/signup';
+      window.history.replaceState({}, '', targetPath);
     } catch {
       // Ignore history API restrictions
     }
   };
 
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setToastErrorMsg(null);
+    setInfoMsg(null);
+    setIsLoading(true);
+
+    try {
+      const redirectTo =
+        typeof window !== 'undefined' && window.location?.origin
+          ? `${window.location.origin}/update-password`
+          : undefined;
+      const result = await sendPasswordResetEmailViaSupabase(
+        supabase,
+        email,
+        redirectTo
+      );
+
+      if (!result.success) {
+        setErrorMsg(result.message);
+        return;
+      }
+
+      setInfoMsg(result.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdatePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setToastErrorMsg(null);
+    setInfoMsg(null);
+    setIsLoading(true);
+
+    try {
+      const result = await updateUserPasswordViaSupabase(
+        supabase,
+        newPassword,
+        confirmNewPassword
+      );
+
+      if (!result.success) {
+        setErrorMsg(result.message);
+        return;
+      }
+
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setInfoMsg(result.message);
+
+      // Sign out the temporary recovery session and redirect to /login after a short delay
+      window.setTimeout(async () => {
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          // Ignore signOut errors
+        }
+        onSignOut();
+        handleSwitchMode('signin', { preserveInfo: true });
+      }, 1500);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
+    if (mode === 'forgot_password') {
+      await handleForgotPasswordSubmit(e);
+      return;
+    }
+    if (mode === 'update_password') {
+      await handleUpdatePasswordSubmit(e);
+      return;
+    }
+
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
@@ -203,8 +301,9 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
           }),
         };
 
+        setInfoMsg(LOGIN_SUCCESS_TOAST_MESSAGE);
         onAuthenticated(signedInUser);
-        redirectToHome();
+        redirectToHome('/dashboard');
       }
     } catch (err) {
       setErrorMsg(
@@ -262,9 +361,9 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
   return (
     <section
       aria-label="Create Account and Authentication"
-      className="min-h-[calc(100vh-130px)] w-full flex items-center justify-center px-4 py-12 bg-gradient-to-br from-[#E6ECFA] via-[#EEF1FA] to-[#E2E8F8] dark:from-stone-950 dark:via-stone-900 dark:to-stone-950"
+      className="min-h-[calc(100vh-130px)] w-full flex items-center justify-center px-4 py-10 sm:py-12 bg-gradient-to-br from-[#E6ECFA] via-[#EEF1FA] to-[#E2E8F8] dark:from-stone-950 dark:via-stone-900 dark:to-stone-950"
     >
-      <div className="w-full max-w-[400px] rounded-[34px] bg-gradient-to-b from-white/95 to-[#F4F6FD]/95 dark:from-stone-900/95 dark:to-stone-900/90 p-8 sm:p-10 shadow-[0_24px_60px_-15px_rgba(91,55,242,0.16),0_8px_24px_-8px_rgba(15,23,42,0.06)] border border-white dark:border-stone-800 backdrop-blur-md">
+      <div className="w-full max-w-[400px] rounded-[34px] bg-gradient-to-b from-white/95 to-[#F4F6FD]/95 dark:from-stone-900/95 dark:to-stone-900/90 p-6 sm:p-10 shadow-[0_24px_60px_-15px_rgba(91,55,242,0.16),0_8px_24px_-8px_rgba(15,23,42,0.06)] border border-white dark:border-stone-800 backdrop-blur-md transition-all duration-300">
         {/* Top Tutor Zone Brand Header */}
         <div className="flex flex-col items-center justify-center mb-5 gap-2.5">
           <div className="text-xl sm:text-2xl font-extrabold tracking-tight flex items-center gap-2.5">
@@ -280,7 +379,147 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
           </div>
         </div>
 
-        {currentUser ? (
+        {mode === 'update_password' ? (
+          <div>
+            <div className="flex justify-center mb-3">
+              <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 text-[#5E3BEE] dark:text-indigo-400">
+                <ShieldCheck className="w-5 h-5" />
+              </span>
+            </div>
+
+            <h1 className="text-[24px] sm:text-[26px] font-bold tracking-tight text-slate-900 dark:text-white text-center leading-tight">
+              Update Password
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 text-center mt-1.5 mb-6 font-medium leading-relaxed">
+              Create a strong new password for your Tutor Zone account below.
+            </p>
+
+            {infoMsg && (
+              <div
+                role="status"
+                className="mb-4 flex items-start gap-2.5 rounded-2xl bg-emerald-50/95 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 px-4 py-3 text-left shadow-2xs"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                  {infoMsg}
+                </p>
+              </div>
+            )}
+
+            {(errorMsg || toastErrorMsg) && (
+              <div
+                role="alert"
+                className="mb-4 flex items-start gap-2 rounded-2xl bg-rose-50/95 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/80 px-3.5 py-2.5 text-left shadow-2xs"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-rose-700 dark:text-rose-300 leading-relaxed">
+                  {toastErrorMsg || errorMsg}
+                </p>
+              </div>
+            )}
+
+            <form
+              onSubmit={handleUpdatePasswordSubmit}
+              className="space-y-4"
+              noValidate
+            >
+              <div>
+                <span className="block text-xs font-semibold text-slate-700 dark:text-stone-300 mb-1.5 ml-1">
+                  New Password
+                </span>
+                <label className="flex items-center bg-white dark:bg-stone-800/90 border border-slate-200/80 dark:border-stone-700 rounded-2xl px-4 py-3.5 shadow-[0_2px_6px_rgba(15,23,42,0.02)] focus-within:border-[#5E3BEE] focus-within:ring-2 focus-within:ring-[#5E3BEE]/15 transition-all">
+                  <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-3" />
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    aria-label="New Password"
+                    placeholder="At least 6 characters"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full bg-transparent text-sm text-slate-800 dark:text-stone-100 placeholder:text-slate-400 focus:outline-none disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showNewPassword ? 'Hide password' : 'Show password'
+                    }
+                    onClick={() => setShowNewPassword((prev) => !prev)}
+                    className="ml-2 text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 focus:outline-none cursor-pointer"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </label>
+              </div>
+
+              <div>
+                <span className="block text-xs font-semibold text-slate-700 dark:text-stone-300 mb-1.5 ml-1">
+                  Confirm New Password
+                </span>
+                <label className="flex items-center bg-white dark:bg-stone-800/90 border border-slate-200/80 dark:border-stone-700 rounded-2xl px-4 py-3.5 shadow-[0_2px_6px_rgba(15,23,42,0.02)] focus-within:border-[#5E3BEE] focus-within:ring-2 focus-within:ring-[#5E3BEE]/15 transition-all">
+                  <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-3" />
+                  <input
+                    type={showConfirmNewPassword ? 'text' : 'password'}
+                    aria-label="Confirm New Password"
+                    placeholder="Re-enter new password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full bg-transparent text-sm text-slate-800 dark:text-stone-100 placeholder:text-slate-400 focus:outline-none disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showConfirmNewPassword
+                        ? 'Hide confirm password'
+                        : 'Show confirm password'
+                    }
+                    onClick={() => setShowConfirmNewPassword((prev) => !prev)}
+                    className="ml-2 text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 focus:outline-none cursor-pointer"
+                  >
+                    {showConfirmNewPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 px-6 rounded-full bg-gradient-to-b from-[#633CFF] to-[#4E24E6] hover:from-[#5730F2] hover:to-[#421AD6] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-[0_10px_22px_-4px_rgba(84,41,232,0.45)] flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving New Password...</span>
+                  </>
+                ) : (
+                  <span>Save New Password</span>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <a
+                href="/login"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSwitchMode('signin');
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#5E3BEE] dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Login</span>
+              </a>
+            </div>
+          </div>
+        ) : currentUser ? (
           <div className="text-center">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold mb-3">
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -297,7 +536,7 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
             <div className="space-y-3">
               <button
                 type="button"
-                onClick={redirectToHome}
+                onClick={() => redirectToHome('/dashboard')}
                 className="w-full py-3.5 px-6 rounded-full bg-gradient-to-b from-[#633CFF] to-[#4E24E6] hover:from-[#5730F2] hover:to-[#421AD6] text-white font-semibold text-sm shadow-[0_10px_22px_-4px_rgba(84,41,232,0.45)] flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
               >
                 <span>Go to Home Page</span>
@@ -312,6 +551,98 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
                 <LogOut className="w-4 h-4 text-slate-500" />
                 <span>Sign Out</span>
               </button>
+            </div>
+          </div>
+        ) : mode === 'forgot_password' ? (
+          <div>
+            <div className="flex justify-center mb-3">
+              <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 text-[#5E3BEE] dark:text-indigo-400">
+                <KeyRound className="w-5 h-5" />
+              </span>
+            </div>
+
+            <h1 className="text-[24px] sm:text-[26px] font-bold tracking-tight text-slate-900 dark:text-white text-center leading-tight">
+              Forgot Password?
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 text-center mt-1.5 mb-6 font-medium leading-relaxed">
+              Enter your registered email address and we&apos;ll send you a secure link to reset your password.
+            </p>
+
+            {infoMsg && (
+              <div
+                role="status"
+                className="mb-4 flex items-start gap-2.5 rounded-2xl bg-emerald-50/95 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/80 px-4 py-3 text-left shadow-2xs"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                  {infoMsg}
+                </p>
+              </div>
+            )}
+
+            {(errorMsg || toastErrorMsg) && (
+              <div
+                role="alert"
+                className="mb-4 flex items-start gap-2 rounded-2xl bg-rose-50/95 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/80 px-3.5 py-2.5 text-left shadow-2xs"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-rose-700 dark:text-rose-300 leading-relaxed">
+                  {toastErrorMsg || errorMsg}
+                </p>
+              </div>
+            )}
+
+            <form
+              onSubmit={handleForgotPasswordSubmit}
+              className="space-y-4"
+              noValidate
+            >
+              <div>
+                <span className="block text-xs font-semibold text-slate-700 dark:text-stone-300 mb-1.5 ml-1">
+                  Email Address
+                </span>
+                <label className="flex items-center bg-white dark:bg-stone-800/90 border border-slate-200/80 dark:border-stone-700 rounded-2xl px-4 py-3.5 shadow-[0_2px_6px_rgba(15,23,42,0.02)] focus-within:border-[#5E3BEE] focus-within:ring-2 focus-within:ring-[#5E3BEE]/15 transition-all">
+                  <Mail className="w-4 h-4 text-slate-400 shrink-0 mr-3" />
+                  <input
+                    type="email"
+                    aria-label="Email Address"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full bg-transparent text-sm text-slate-800 dark:text-stone-100 placeholder:text-slate-400 focus:outline-none disabled:opacity-60"
+                  />
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 px-6 rounded-full bg-gradient-to-b from-[#633CFF] to-[#4E24E6] hover:from-[#5730F2] hover:to-[#421AD6] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-[0_10px_22px_-4px_rgba(84,41,232,0.45)] flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Sending Reset Link...</span>
+                  </>
+                ) : (
+                  <span>Send Reset Link</span>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <a
+                href="/login"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSwitchMode('signin', { prefillEmail: email });
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#5E3BEE] dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Login</span>
+              </a>
             </div>
           </div>
         ) : (
@@ -380,23 +711,42 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
                 />
               </label>
 
-              <label className="flex items-center bg-white dark:bg-stone-800/90 border border-slate-200/80 dark:border-stone-700 rounded-2xl px-4 py-3.5 shadow-[0_2px_6px_rgba(15,23,42,0.02)] focus-within:border-[#5E3BEE] focus-within:ring-2 focus-within:ring-[#5E3BEE]/15 transition-all">
-                <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-3" />
-                <input
-                  type="password"
-                  aria-label={
-                    mode === 'signup' ? 'Create a password' : 'Password'
-                  }
-                  placeholder={
-                    mode === 'signup'
-                      ? 'Create a password'
-                      : 'Enter your password'
-                  }
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-transparent text-sm text-slate-800 dark:text-stone-100 placeholder:text-slate-400 focus:outline-none"
-                />
-              </label>
+              <div>
+                <label className="flex items-center bg-white dark:bg-stone-800/90 border border-slate-200/80 dark:border-stone-700 rounded-2xl px-4 py-3.5 shadow-[0_2px_6px_rgba(15,23,42,0.02)] focus-within:border-[#5E3BEE] focus-within:ring-2 focus-within:ring-[#5E3BEE]/15 transition-all">
+                  <Lock className="w-4 h-4 text-slate-400 shrink-0 mr-3" />
+                  <input
+                    type="password"
+                    aria-label={
+                      mode === 'signup' ? 'Create a password' : 'Password'
+                    }
+                    placeholder={
+                      mode === 'signup'
+                        ? 'Create a password'
+                        : 'Enter your password'
+                    }
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-transparent text-sm text-slate-800 dark:text-stone-100 placeholder:text-slate-400 focus:outline-none"
+                  />
+                </label>
+
+                {mode === 'signin' && (
+                  <div className="flex justify-end mt-2 px-1">
+                    <a
+                      href="/forgot-password"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleSwitchMode('forgot_password', {
+                          prefillEmail: email,
+                        });
+                      }}
+                      className="text-xs font-semibold text-[#5E3BEE] dark:text-indigo-400 hover:text-[#4621D5] dark:hover:text-indigo-300 underline-offset-4 hover:underline transition-colors cursor-pointer"
+                    >
+                      Forgot password?
+                    </a>
+                  </div>
+                )}
+              </div>
 
               <div className="pt-1.5">
                 <button
@@ -510,3 +860,4 @@ export const CreateAccountCard: React.FC<CreateAccountCardProps> = ({
     </section>
   );
 };
+

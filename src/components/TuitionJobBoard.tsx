@@ -14,6 +14,7 @@ import {
 import {
   MEMOIZED_ALL_UPAZILAS,
   SiteSocialSettings,
+  UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE,
   UserAccount,
   extractAdminNoteFromApplication,
   extractCircularDetails,
@@ -27,7 +28,9 @@ import {
   getUserApplicationForCircular,
   getUserAppliedApplications,
   getUserCircularApplicationStatusBadge,
+  isAuthorizedAdminAccount,
   isPaymentApprovedForCircular,
+  isTutorProfileVerifiedForApplication,
   toBanglaNumber,
 } from '../utils/tutorEngine';
 import {
@@ -198,6 +201,13 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
     myTutorProfile,
     userApplications
   );
+  const isLoggedInUser = Boolean(
+    currentUser && (currentUser.email || currentUser.id)
+  );
+  const isUserVerified =
+    !isLoggedInUser ||
+    isAuthorizedAdminAccount(currentUser) ||
+    isTutorProfileVerifiedForApplication(myTutorProfile);
 
   return (
     <section
@@ -205,6 +215,33 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
       aria-label="Live Madaripur Tuition Job Board"
       className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 border-t border-stone-200/80 dark:border-stone-800 overflow-x-hidden"
     >
+      {/* Unverified User Application Restriction Banner */}
+      {isLoggedInUser && !isUserVerified && !restrictionDetails.isRestricted && (
+        <div
+          role="alert"
+          aria-label="Profile Verification Required Notice"
+          className="mb-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800/80 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+        >
+          <div className="flex items-start gap-2.5">
+            <Lock className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-200">
+              {UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE}
+            </p>
+          </div>
+          {onNavigateToProfile && (
+            <button
+              type="button"
+              onClick={onNavigateToProfile}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#047857] hover:bg-[#065F46] text-white text-xs font-extrabold whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {lang === 'en' ? 'Verify Profile Now' : 'প্রোফাইল ভেরিফাই করুন'}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
       {/* Enterprise-Grade Account Status & Compliance Notice (For Rejected / Restricted Tutors) */}
       {restrictionDetails.isRestricted && (
         <div
@@ -611,6 +648,7 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
             );
             const buttonState = getCircularCardApplyButtonState(myTutorApp, {
               isTutorRestricted: restrictionDetails.isRestricted,
+              isProfileVerified: isLoggedInUser ? isUserVerified : undefined,
               isPaymentApproved,
               lang,
             });
@@ -995,6 +1033,22 @@ export const TuitionJobBoard: React.FC<TuitionJobBoardProps> = ({
                       >
                         <span>{buttonState.label}</span>
                       </button>
+                    ) : buttonState.state === 'unverified' ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <button
+                          type="button"
+                          disabled={true}
+                          title={UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE}
+                          aria-label={UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE}
+                          className="min-h-[44px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-300 dark:border-stone-700 cursor-not-allowed opacity-85 whitespace-nowrap"
+                        >
+                          <Lock className="w-3.5 h-3.5 shrink-0" />
+                          <span>{lang === 'en' ? 'Apply Now' : 'আবেদন করুন'}</span>
+                        </button>
+                        <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                          {UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE}
+                        </span>
+                      </div>
                     ) : myTutorApp ? (
                       <button
                         type="button"

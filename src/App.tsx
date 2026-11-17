@@ -76,6 +76,8 @@ import {
   mapSupabaseRowToVerificationRequest,
   SITE_SOCIAL_SETTINGS_STORAGE_KEY,
   SiteSocialSettings,
+  AutomaticHomepageCounts,
+  fetchAutomaticHomepageCountsFromSupabase,
   PAYMENT_REQUESTS_STORAGE_KEY,
   PaymentSubmissionInput,
   GUARDIAN_REQUESTS_STORAGE_KEY,
@@ -139,6 +141,8 @@ import {
   hideTuitionCircularInSupabase,
   deleteTuitionCircularFromSupabase,
   DUPLICATE_CIRCULAR_APPLICATION_MESSAGE,
+  UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE,
+  verifyTutorStatusInDatabaseBeforeApply,
   toBanglaNumber,
 } from './utils/tutorEngine';
 import { executeAdminDeleteProfileEverywhere } from './utils/supabaseAdminDelete';
@@ -156,7 +160,7 @@ import { TuitionJobBoard } from './components/TuitionJobBoard';
 import { NoticeBoard } from './components/NoticeBoard';
 import { GuardianRequestModal } from './components/GuardianRequestModal';
 import { FloatingWhatsAppButton } from './components/FloatingWhatsAppButton';
-import { CreateAccountCard } from './components/CreateAccountCard';
+import { CreateAccountCard, AuthViewMode } from './components/CreateAccountCard';
 import {
   AdminApplicantsModal,
   AdminPinModal,
@@ -295,9 +299,15 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState<boolean>(false);
   const [activeDesk, setActiveDesk] = useState<WorkspaceDesk>(() => {
     try {
+      const path = window.location.pathname;
+      const hash = window.location.hash || '';
       if (
-        window.location.pathname === '/login' ||
-        window.location.pathname === '/signup'
+        path === '/login' ||
+        path === '/signup' ||
+        path === '/forgot-password' ||
+        path === '/update-password' ||
+        path === '/reset-password' ||
+        hash.includes('type=recovery')
       ) {
         return 'account';
       }
@@ -306,9 +316,21 @@ export default function App() {
     }
     return 'tutors';
   });
-  const [authMode, setAuthMode] = useState<'signup' | 'signin'>(() => {
+  const [authMode, setAuthMode] = useState<AuthViewMode>(() => {
     try {
-      return window.location.pathname === '/login' ? 'signin' : 'signup';
+      const path = window.location.pathname;
+      const hash = window.location.hash || '';
+      if (
+        path === '/update-password' ||
+        path === '/reset-password' ||
+        hash.includes('type=recovery')
+      ) {
+        return 'update_password';
+      }
+      if (path === '/forgot-password') {
+        return 'forgot_password';
+      }
+      return path === '/login' ? 'signin' : 'signup';
     } catch {
       return 'signup';
     }
@@ -399,6 +421,8 @@ export default function App() {
   const [isPostJobOpen, setIsPostJobOpen] = useState<boolean>(false);
   const [siteSocialSettings, setSiteSocialSettings] =
     useState<SiteSocialSettings>(() => readSiteSocialSettingsFromStorage());
+  const [autoHomepageCounts, setAutoHomepageCounts] =
+    useState<AutomaticHomepageCounts | null>(null);
   const [paymentRequests, setPaymentRequests] = useState<
     PaymentRequestRecord[]
   >(() => readPaymentRequestsFromStorage());
@@ -419,11 +443,14 @@ export default function App() {
   );
 
   const refreshSiteSocialSettings = useCallback(async (forceRefresh = true) => {
-    const latest = await fetchSiteSocialSettingsOncePerSession(
-      supabase,
-      forceRefresh
-    );
+    const [latest, exactCounts] = await Promise.all([
+      fetchSiteSocialSettingsOncePerSession(supabase, forceRefresh),
+      fetchAutomaticHomepageCountsFromSupabase(supabase),
+    ]);
     setSiteSocialSettings(latest);
+    if (exactCounts) {
+      setAutoHomepageCounts(exactCounts);
+    }
   }, []);
 
   const refreshPaymentRequests = useCallback(async () => {
@@ -1536,10 +1563,38 @@ export default function App() {
       }
     };
 
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshSiteSocialSettings(true);
+      }
+    };
+
+    // Real-time Supabase channel subscription for `site_settings` (id = 1)
+    const siteSettingsChannel = supabase
+      .channel('public:site_settings_live_sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'site_settings',
+          filter: 'id=eq.1',
+        },
+        () => {
+          void refreshSiteSocialSettings(true);
+        }
+      )
+      .subscribe();
+
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      void supabase.removeChannel(siteSettingsChannel);
     };
   }, [
     fetchLiveCirculars,
@@ -2350,6 +2405,17 @@ export default function App() {
       );
     }
 
+    const dbVerificationCheck = await verifyTutorStatusInDatabaseBeforeApply(
+      supabase,
+      currentUser,
+      myTutorProfile
+    );
+    if (!dbVerificationCheck.verified) {
+      throw new Error(
+        dbVerificationCheck.error || UNVERIFIED_TUTOR_APPLY_TOAST_MESSAGE
+      );
+    }
+
     const targetCircularId = jobId.trim();
     const targetEmail = (
       input.userEmail ||
@@ -3114,19 +3180,25 @@ export default function App() {
                 handleProtectedNavigate('job_board')
               }
               verifiedTutorsCount={
-                tutors.filter((t) => t.nidVerified && t.uniIdVerified).length ||
-                tutors.length
+                autoHomepageCounts?.verifiedTutorsCount ??
+                (tutors.filter((t) => t.nidVerified && t.uniIdVerified).length ||
+                  tutors.length)
               }
               onlineTutorsCount={
                 tutors.filter(
                   (t) => Array.isArray(t.modes) && t.modes.includes('Online')
-                ).length
+                ).length ||
+                (autoHomepageCounts?.onlineTutorsCount ?? 0)
               }
               activeCircularsCount={
-                jobs.filter((j) => (j.status || 'Active') === 'Active').length ||
-                jobs.length
+                autoHomepageCounts?.activeCircularsCount ??
+                (jobs.filter((j) => (j.status || 'Active') === 'Active').length ||
+                  jobs.length)
               }
-              totalApplicationsCount={circularApplications.length}
+              totalApplicationsCount={
+                autoHomepageCounts?.totalApplicationsCount ??
+                circularApplications.length
+              }
               siteSocialSettings={siteSocialSettings}
             />
 
@@ -3572,6 +3644,7 @@ export default function App() {
 
       {/* Floating WhatsApp Live Chat Help Button */}
       <FloatingWhatsAppButton
+        whatsapp_number={siteSocialSettings.whatsappContact}
         whatsappContact={siteSocialSettings.whatsappContact}
         lang={lang}
       />
